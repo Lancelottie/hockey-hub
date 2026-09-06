@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { roleLabel } from "@/lib/users";
 import { useTeam } from "@/lib/team-context";
 export default function Topbar() {
   const { teams, activeTeam, setActiveTeamId, club } = useTeam();
@@ -26,7 +27,7 @@ export default function Topbar() {
         </label>
       </div>
       <div className="flex flex-wrap items-center gap-4 text-sm">
-        <span className="role-badge">{club.role.replaceAll("_", " ")}</span>
+        <span className="role-badge">{roleLabel(club.role)}</span>
         <Link href="/teams">All teams</Link>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { randomUUID } from "node:crypto";
-import { ROLES, type Role } from "../lib/users";
+import { ROLES, roleLabel, roleTeamName, type Role } from "../lib/users";
 process.loadEnvFile(".env.local");
 const { createAuth } = await import("../lib/auth");
 const { getStore } = await import("../lib/database");
@@ -13,8 +13,9 @@ const name = await prompt.question("Name: ");
 const clubName = await prompt.question(
   "Club name (exact existing name to join): ",
 );
+for (const value of ROLES) console.log(`${value}: ${roleLabel(value)}`);
 const role = (await prompt.question(`Role (${ROLES.join(", ")}): `)) as Role;
-const teamName = await prompt.question("Team name (exact existing name; leave blank for all teams): ");
+const teamName = roleTeamName(role) ?? await prompt.question("Team name (exact existing name; leave blank for all teams): ");
 if (teamName.trim() && ["administrator", "club_admin"].includes(role))
   throw new Error("Use manager, coach, player or read_only for team-only access.");
 if (!ROLES.includes(role) || !clubName.trim() || !name.trim())

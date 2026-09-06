@@ -52,6 +52,9 @@ test("PostgreSQL transfer, imported login, persistence, concurrency, permissions
     const pgAuth = createAuth(true);
     await (await getMigrations(pgAuth.options)).runMigrations();
     await getPool().query(postgresSchema);
+    // Exercise upgrading the old production CHECK constraint as well as a fresh schema.
+    await getPool().query("ALTER TABLE club_memberships DROP CONSTRAINT club_memberships_role_check; ALTER TABLE club_memberships ADD CONSTRAINT club_memberships_role_check CHECK(role IN ('administrator','club_admin','manager','coach','player','read_only'))");
+    await getPool().query(postgresSchema);
     await getPool().query(postgresSchema); // idempotent application migration
     const result = await importSqlite(source, getPool());
     assert.equal(result.counts.membership_team_access, 1);

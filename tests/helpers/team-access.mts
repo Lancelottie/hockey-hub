@@ -1,3 +1,4 @@
+import { ROLES, roleTeamName } from "../../lib/users";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { createAuth, getAuth } from "../../lib/auth";
@@ -90,4 +91,29 @@ export async function checkTeamAccess() {
   assert.deepEqual(readOnly.data.reviews, {});
   assert.deepEqual(readOnly.data.assessments, {});
   await assert.rejects(writeClub(user.id, "scoped", readOnly.revision, readOnly.data), AccessError);
+  for (const [id, name] of [["first", "Ladies 1s"], ["second", "Ladies 2s"], ["third", "Ladies 3s"]])
+    await db.prepare("UPDATE teams SET name=? WHERE club_id='scoped' AND id=?").run(name, id);
+  await db.prepare("DELETE FROM membership_team_access WHERE user_id=?").run(user.id);
+  for (const role of ROLES.filter(role => roleTeamName(role))) {
+    await db.prepare("UPDATE club_memberships SET role=? WHERE user_id=?").run(role, user.id);
+    const teamName = roleTeamName(role);
+    const expected = teamName === "Ladies 1s" ? "first" : teamName === "Ladies 2s" ? "second" : "third";
+    const scoped = await readClub(user.id, "scoped");
+    assert.deepEqual(scoped.club.teamIds, [expected]);
+    assert.deepEqual(scoped.data.teams.map(t => t.name), [teamName]);
+    assert.equal((await writeClub(user.id, "scoped", scoped.revision, scoped.data)), scoped.revision + 1);
+    const wrongTeam = expected === "first" ? "third" : "first";
+    assert.equal((await sourceGET(new Request(`${url}/api/england-hockey?clubId=scoped&teamId=${wrongTeam}`, { headers: { cookie } }))).status, 403);
+    const changed = structuredClone(scoped.data);
+    changed.teams[0].name = "Cannot rename the club team";
+    await assert.rejects(writeClub(user.id, "scoped", scoped.revision + 1, changed), AccessError);
+    // Even an incorrectly assigned explicit scope must not widen the named role.
+    await db.prepare("INSERT INTO membership_team_access VALUES(?,?,?)").run(user.id, "scoped", JSON.stringify([wrongTeam]));
+    assert.deepEqual((await readClub(user.id, "scoped")).data, emptySnapshot());
+    await db.prepare("DELETE FROM membership_team_access WHERE user_id=?").run(user.id);
+  }
+  await db.prepare("UPDATE teams SET name='Renamed' WHERE club_id='scoped' AND id='third'").run();
+  assert.deepEqual((await readClub(user.id, "scoped")).data, emptySnapshot());
+  await db.prepare("UPDATE teams SET name='Ladies 3s' WHERE club_id='scoped' AND id IN ('first','third')").run();
+  assert.deepEqual((await readClub(user.id, "scoped")).data, emptySnapshot());
 }

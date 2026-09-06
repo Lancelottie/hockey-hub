@@ -2,7 +2,7 @@ import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 import { withFormation } from "./formation";
 import { getStore, lockClub } from "./database";
-import { canAdmin, canManage, type Role } from "./users";
+import { canAdmin, canManage, roleTeamName, type Role } from "./users";
 import { emptySnapshot, snapshotSchema, type Snapshot } from "./validation";
 export class AccessError extends Error {
   constructor(
@@ -19,10 +19,17 @@ export async function listClubs(userId: string): Promise<ClubAccess[]> {
       `SELECT c.id,c.name,m.role,s.team_ids FROM clubs c JOIN club_memberships m ON m.club_id=c.id JOIN app_accounts a ON a.user_id=m.user_id LEFT JOIN membership_team_access s ON s.user_id=m.user_id AND s.club_id=m.club_id WHERE m.user_id=? AND a.status='active' ORDER BY c.name`,
     )
     .all(userId)) as { id: string; name: string; role: Role; team_ids: string | null }[];
-  return rows.map(({ team_ids, ...club }) => ({
-    ...club,
-    // A missing restriction means club-wide access; an empty list grants no teams.
-    teamIds: team_ids === null ? null : z.array(z.string()).parse(JSON.parse(team_ids)),
+  return Promise.all(rows.map(async ({ team_ids, ...club }) => {
+    let teamIds = team_ids === null ? null : z.array(z.string()).parse(JSON.parse(team_ids));
+    const teamName = roleTeamName(club.role);
+    if (teamName) {
+      const teams = await getStore().prepare("SELECT id FROM teams WHERE club_id=? AND name=?")
+        .all(club.id, teamName) as { id: string }[];
+      // Named roles never become club-wide, even if a scope row is absent or misconfigured.
+      // A missing, renamed or ambiguous team grants no access until corrected.
+      teamIds = teams.length === 1 && (teamIds === null || teamIds.includes(teams[0].id)) ? [teams[0].id] : [];
+    }
+    return { ...club, teamIds };
   }));
 }
 export async function requireClub(userId: string, clubId: string, write = false) {

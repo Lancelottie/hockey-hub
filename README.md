@@ -79,3 +79,9 @@ npm audit
 Security tests use an isolated temporary database and real library sessions. Browser tests use installed Google Chrome, a dedicated server on port 3100 and `.test-data/e2e.sqlite`; no real club data is used. Screenshots/traces are in ignored `test-results/`. Browser tests cover sign-in, player filtering, saved lineup/checklist persistence, responsive navigation and logout. See [the pre-implementation audit](docs/AUDIT.md) for findings and architectural decisions.
 
 England Hockey fixture import and synchronisation are available in **Fixtures** for each team. See [the integration guide](docs/ENGLAND_HOCKEY.md) for configuration, permissions, migration details, data-source investigation, tests and the `npm run fixtures:sync -- <club-id> <team-id>` server command.
+
+### Named captain roles
+
+Administration → People & access lists all available roles. The additional types are Ladies 1 Captain (`ladies_1s_captain`), Ladies 1s Vice Captain (`ladies_1s_vice_captain`), Ladies 2s Captain (`ladies_2s_captain`), Ladies 3s Captain (`ladies_3s_captain`) and Ladies 3s Vice Captain (`ladies_3s_vice_captain`). They can edit their team's players, fixtures, selections and notes, but cannot administer club teams. Adding role types does not create accounts or change existing memberships.
+
+These roles resolve the corresponding exact team name within the user's club (Ladies 1s, Ladies 2s or Ladies 3s) and intersect any explicit team restriction. A missing, renamed or duplicate matching team grants no team access until corrected. The account setup script selects the required team automatically. Run `npm run setup` locally or `npm run db:migrate` for PostgreSQL before deploying to expand the membership role constraint; both preserve existing memberships and restrictions.

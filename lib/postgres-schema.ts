@@ -1,3 +1,4 @@
+import { roleSqlValues } from "./users";
 export const postgresSchema = `
     CREATE TABLE IF NOT EXISTS app_accounts (
       user_id TEXT PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
@@ -11,9 +12,11 @@ export const postgresSchema = `
     CREATE TABLE IF NOT EXISTS club_memberships (
       user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
       club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
-      role TEXT NOT NULL CHECK(role IN ('administrator','club_admin','manager','coach','player','read_only')),
+      role TEXT NOT NULL CHECK(role IN (${roleSqlValues})),
       PRIMARY KEY(user_id, club_id)
     );
+    ALTER TABLE club_memberships DROP CONSTRAINT IF EXISTS club_memberships_role_check;
+    ALTER TABLE club_memberships ADD CONSTRAINT club_memberships_role_check CHECK(role IN (${roleSqlValues}));
     CREATE TABLE IF NOT EXISTS membership_team_access (
       user_id TEXT NOT NULL, club_id TEXT NOT NULL, team_ids TEXT NOT NULL,
       PRIMARY KEY(user_id,club_id),

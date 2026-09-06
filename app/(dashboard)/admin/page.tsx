@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useTeam } from "@/lib/team-context";
-import { canAdmin } from "@/lib/users";
+import { canAdmin, canManage, ROLES, roleLabel, roleTeamName } from "@/lib/users";
 import {
   getSnapshot,
   hasUnsavedChanges,
@@ -188,8 +188,19 @@ export default function AdminPage() {
         <p className="text-sm text-[var(--text-secondary)]">
           Account creation and club membership changes are managed by the
           deployment operator. Contact them to add or suspend a member. Your
-          current role is {club.role.replaceAll("_", " ")}.
+          current role is {roleLabel(club.role)}.
         </p>
+        <h3 className="mt-5 mb-3 font-semibold">Available roles</h3>
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {ROLES.map(role => <li key={role} className="rounded-lg border border-[var(--border-primary)] p-3">
+            <p className="font-semibold">{roleLabel(role)}</p>
+            <p className="text-sm text-[var(--text-secondary)]">{roleTeamName(role)
+              ? `Edit players, fixtures, selections and notes for ${roleTeamName(role)} only.`
+              : canAdmin(role) ? "Manage club teams, data and selections."
+              : canManage(role) ? "Edit players, fixtures, selections and notes within assigned access."
+              : "View team data and published selections within assigned access."}</p>
+          </li>)}
+        </ul>
       </section>
     </div>
   );

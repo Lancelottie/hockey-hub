@@ -1,3 +1,4 @@
+import { roleSqlValues } from "./users";
 import Database from "better-sqlite3";
 import { migrateEnglandHockey } from "./england-hockey/migration";
 import { mkdirSync } from "node:fs";
@@ -34,7 +35,7 @@ export function migrateApp() {
     CREATE TABLE IF NOT EXISTS club_memberships (
       user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
       club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
-      role TEXT NOT NULL CHECK(role IN ('administrator','club_admin','manager','coach','player','read_only')),
+      role TEXT NOT NULL CHECK(role IN (${roleSqlValues})),
       PRIMARY KEY(user_id, club_id)
     );
     CREATE TABLE IF NOT EXISTS membership_team_access (
@@ -73,5 +74,32 @@ export function migrateApp() {
       action TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  migrateMembershipRoles(getDb());
   migrateEnglandHockey(getDb());
+}
+
+/** SQLite requires rebuilding a table to expand a CHECK constraint. Preserve child scopes. */
+export function migrateMembershipRoles(db: Database.Database) {
+  const schema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='club_memberships'").get() as { sql: string };
+  if (schema.sql.includes("'ladies_3s_vice_captain'")) return;
+  if (db.inTransaction) throw new Error("Run the role migration outside an existing transaction.");
+  const foreignKeys = db.pragma("foreign_keys", { simple: true });
+  db.pragma("foreign_keys = OFF");
+  try {
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE club_memberships_expanded (
+          user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+          club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK(role IN (${roleSqlValues})),
+          PRIMARY KEY(user_id,club_id)
+        );
+        INSERT INTO club_memberships_expanded SELECT user_id,club_id,role FROM club_memberships;
+        DROP TABLE club_memberships;
+        ALTER TABLE club_memberships_expanded RENAME TO club_memberships;
+      `);
+      const violations = db.pragma("foreign_key_check");
+      if (!Array.isArray(violations) || violations.length) throw new Error("Role migration would break membership references.");
+    })();
+  } finally { db.pragma(`foreign_keys = ${foreignKeys ? "ON" : "OFF"}`); }
 }
