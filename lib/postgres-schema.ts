@@ -14,6 +14,11 @@ export const postgresSchema = `
       role TEXT NOT NULL CHECK(role IN ('administrator','club_admin','manager','coach','player','read_only')),
       PRIMARY KEY(user_id, club_id)
     );
+    CREATE TABLE IF NOT EXISTS membership_team_access (
+      user_id TEXT NOT NULL, club_id TEXT NOT NULL, team_ids TEXT NOT NULL,
+      PRIMARY KEY(user_id,club_id),
+      FOREIGN KEY(user_id,club_id) REFERENCES club_memberships(user_id,club_id) ON DELETE CASCADE
+    );
     CREATE TABLE IF NOT EXISTS teams (
       rowid BIGSERIAL UNIQUE,
       club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,

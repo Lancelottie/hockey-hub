@@ -1,3 +1,4 @@
+import { checkTeamAccess } from "./helpers/team-access.mts";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -24,6 +25,7 @@ test("authentication, tenant boundaries, validation, concurrency and legacy migr
   const provisioning = createAuth(true);
   await (await getMigrations(provisioning.options)).runMigrations();
   migrateApp();
+  await t.test("team-only access protects every read and write", checkTeamAccess);
   const password = randomBytes(24).toString("base64url");
   const alice = await provisioning.api.signUpEmail({
     body: { email: "alice@example.test", name: "Alice", password },

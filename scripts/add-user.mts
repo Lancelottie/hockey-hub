@@ -14,6 +14,9 @@ const clubName = await prompt.question(
   "Club name (exact existing name to join): ",
 );
 const role = (await prompt.question(`Role (${ROLES.join(", ")}): `)) as Role;
+const teamName = await prompt.question("Team name (exact existing name; leave blank for all teams): ");
+if (teamName.trim() && ["administrator", "club_admin"].includes(role))
+  throw new Error("Use manager, coach, player or read_only for team-only access.");
 if (!ROLES.includes(role) || !clubName.trim() || !name.trim())
   throw new Error("Valid name, club and role required.");
 // Let the terminal collect a hidden password. Never pass credentials as CLI arguments.
@@ -38,6 +41,11 @@ if (existing)
   throw new Error(
     "User exists. Use the documented membership SQL to grant access; password was not changed.",
   );
+const scopedTeam = teamName.trim() ? (await db.prepare(
+  "SELECT t.id,t.club_id FROM teams t JOIN clubs c ON c.id=t.club_id WHERE c.name=? AND t.name=?",
+).all(clubName.trim(), teamName.trim())) as { id: string; club_id: string }[] : null;
+if (scopedTeam && scopedTeam.length !== 1)
+  throw new Error("Choose an unambiguous existing club and team name.");
 const result = await auth.api.signUpEmail({
   body: { email: email.trim(), name: name.trim(), password: password.stdout },
 });
@@ -56,6 +64,11 @@ const result = await auth.api.signUpEmail({
   (await db.prepare(
     "INSERT INTO club_memberships(user_id,club_id,role) VALUES(?,?,?)",
   ).run(result.user.id, club.id, role));
+  if (scopedTeam) {
+    if (scopedTeam[0].club_id !== club.id) throw new Error("Club and team do not match.");
+    await db.prepare("INSERT INTO membership_team_access(user_id,club_id,team_ids) VALUES(?,?,?)")
+      .run(result.user.id, club.id, JSON.stringify([scopedTeam[0].id]));
+  }
 })());
 console.log(
   "Account provisioned. Sign in with the email and password you supplied.",

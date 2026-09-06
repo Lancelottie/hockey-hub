@@ -2,15 +2,18 @@ import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { Pool } from "pg";
 
-export const TRANSFER_TABLES = ["user", "account", "app_accounts", "clubs", "club_memberships", "teams", "team_formation_presets", "players", "fixtures", "fixture_documents", "assessments", "audit_events", "team_fixture_sources"] as const;
+export const TRANSFER_TABLES = ["user", "account", "app_accounts", "clubs", "club_memberships", "membership_team_access", "teams", "team_formation_presets", "players", "fixtures", "fixture_documents", "assessments", "audit_events", "team_fixture_sources"] as const;
 const orderedTables = new Set<string>(["teams", "players", "fixtures"]);
 const quote = (name: string) => '"' + name.replaceAll('"', '""') + '"';
 export type TransferResult = { alreadyImported: boolean; counts: Record<string, number>; digest: string };
 
 /** Source is a consistent SQLite backup. Refuse nonempty destinations; never overwrite production. */
 export async function importSqlite(source: Database.Database, target: Pool): Promise<TransferResult> {
-  const rows = Object.fromEntries(TRANSFER_TABLES.map(table => [table, source.prepare(`SELECT ${orderedTables.has(table) ? "rowid, " : ""}* FROM ${quote(table)} ORDER BY rowid`).all() as Record<string, unknown>[]]));
-  const digest = createHash("sha256").update(JSON.stringify(rows)).digest("hex");
+  const rows = Object.fromEntries(TRANSFER_TABLES.map(table => [table,
+    table === "membership_team_access" && !source.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table) ? [] : source.prepare(`SELECT ${orderedTables.has(table) ? "rowid, " : ""}* FROM ${quote(table)} ORDER BY rowid`).all() as Record<string, unknown>[]]));
+  // Preserve the digest of pre-team-scope backups when there are no restrictions.
+  const digestRows = Object.fromEntries(Object.entries(rows).filter(([table, values]) => table !== "membership_team_access" || values.length));
+  const digest = createHash("sha256").update(JSON.stringify(digestRows)).digest("hex");
   const counts = Object.fromEntries(TRANSFER_TABLES.map(table => [table, rows[table].length]));
   const client = await target.connect();
   try {

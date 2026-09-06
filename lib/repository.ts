@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 import { withFormation } from "./formation";
 import { getStore, lockClub } from "./database";
@@ -11,67 +12,101 @@ export class AccessError extends Error {
     super(message);
   }
 }
-export type ClubAccess = { id: string; name: string; role: Role };
+export type ClubAccess = { id: string; name: string; role: Role; teamIds: string[] | null };
 export async function listClubs(userId: string): Promise<ClubAccess[]> {
-  return (await getStore()
+  const rows = (await getStore()
     .prepare(
-      `SELECT c.id,c.name,m.role FROM clubs c JOIN club_memberships m ON m.club_id=c.id JOIN app_accounts a ON a.user_id=m.user_id WHERE m.user_id=? AND a.status='active' ORDER BY c.name`,
+      `SELECT c.id,c.name,m.role,s.team_ids FROM clubs c JOIN club_memberships m ON m.club_id=c.id JOIN app_accounts a ON a.user_id=m.user_id LEFT JOIN membership_team_access s ON s.user_id=m.user_id AND s.club_id=m.club_id WHERE m.user_id=? AND a.status='active' ORDER BY c.name`,
     )
-    .all(userId)) as ClubAccess[];
+    .all(userId)) as { id: string; name: string; role: Role; team_ids: string | null }[];
+  return rows.map(({ team_ids, ...club }) => ({
+    ...club,
+    // A missing restriction means club-wide access; an empty list grants no teams.
+    teamIds: team_ids === null ? null : z.array(z.string()).parse(JSON.parse(team_ids)),
+  }));
 }
 export async function requireClub(userId: string, clubId: string, write = false) {
   const club = (await listClubs(userId)).find((c) => c.id === clubId);
-  if (!club || (write && !canManage(club.role)))
+  if (!club || (write && (!canManage(club.role) || club.teamIds?.length === 0)))
     throw new AccessError(403, "You do not have permission for this club.");
   return club;
 }
+export async function requireTeamAccess(userId: string, clubId: string, teamId: string, write = false) {
+  const club = await requireClub(userId, clubId, write);
+  if (club.teamIds !== null && !club.teamIds.includes(teamId))
+    throw new AccessError(403, "You do not have permission for this team.");
+  return club;
+}
+
+function selectTeams(data: Snapshot, teamIds: Set<string>): Snapshot {
+  const players = data.players.filter(p => teamIds.has(p.teamId));
+  const matches = data.matches.filter(m => teamIds.has(m.teamId));
+  const playerIds = new Set(players.map(p => p.id));
+  const matchIds = new Set(matches.map(m => m.id));
+  return {
+    teams: data.teams.filter(t => teamIds.has(t.id)), players, matches,
+    lineups: Object.fromEntries(Object.entries(data.lineups).filter(([id]) => matchIds.has(id))),
+    captainTasks: Object.fromEntries(Object.entries(data.captainTasks).filter(([id]) => matchIds.has(id))),
+    reviews: Object.fromEntries(Object.entries(data.reviews).filter(([id]) => matchIds.has(id))),
+    assessments: Object.fromEntries(Object.entries(data.assessments).filter(([id]) => playerIds.has(id))),
+  };
+}
+
 export async function readClub(userId: string, clubId: string) {
-  const club = (await requireClub(userId, clubId));
+  return getStore().transaction(async () => {
+    const club = await requireClub(userId, clubId);
+    const result = await readClubData(club);
+    if (club.teamIds !== null) result.data = selectTeams(result.data, new Set(club.teamIds));
+    return result;
+  })();
+}
+
+// Internal full snapshot used only after authorization; never return this to a scoped member.
+async function readClubData(club: ClubAccess) {
+  const clubId = club.id;
   const db = getStore();
-  return (await db.transaction(async () => {
-    const data = emptySnapshot();
-    data.teams = (await db
-      .prepare("SELECT id,name FROM teams WHERE club_id=? ORDER BY rowid")
-      .all(clubId)) as Snapshot["teams"];
-    for (const row of (await db.prepare("SELECT team_id,data FROM team_formation_presets WHERE club_id=?").all(clubId)) as {team_id: string; data: string}[]) {
-      const team = data.teams.find(t => t.id === row.team_id);
-      if (team) team.formationPresets = JSON.parse(row.data);
-    }
-    for (const [table, key] of [
-      ["players", "players"],
-      ["fixtures", "matches"],
-    ] as const) {
-      data[key] = (
-        (await db
-          .prepare(`SELECT data FROM ${table} WHERE club_id=? ORDER BY rowid`)
-          .all(clubId)) as { data: string }[]
-      ).map((r) => JSON.parse(r.data));
-    }
-    const docs = (await db
-      .prepare(
-        "SELECT fixture_id,kind,data FROM fixture_documents WHERE club_id=?",
-      )
-      .all(clubId)) as {
-      fixture_id: string;
-      kind: "lineups" | "captainTasks" | "reviews";
-      data: string;
-    }[];
-    for (const row of docs)
-      if (canManage(club.role) || (row.kind === "lineups" && JSON.parse(row.data).formation?.status !== "draft"))
-        data[row.kind][row.fixture_id] = JSON.parse(row.data);
-    // Coordinates are derived, including line orientation updates in existing documents.
-    for (const [id, lineup] of Object.entries(data.lineups))
-      if (lineup.formation) data.lineups[id] = withFormation(lineup, lineup.formation);
-    if (canManage(club.role))
-      for (const row of (await db
-        .prepare("SELECT player_id,data FROM assessments WHERE club_id=?")
-        .all(clubId)) as { player_id: string; data: string }[])
-        data.assessments[row.player_id] = JSON.parse(row.data);
-    const { revision } = (await db
-      .prepare("SELECT revision FROM clubs WHERE id=?")
-      .get(clubId)) as { revision: number };
-    return { club, data, revision };
-  })());
+  const data = emptySnapshot();
+  data.teams = (await db
+    .prepare("SELECT id,name FROM teams WHERE club_id=? ORDER BY rowid")
+    .all(clubId)) as Snapshot["teams"];
+  for (const row of (await db.prepare("SELECT team_id,data FROM team_formation_presets WHERE club_id=?").all(clubId)) as {team_id: string; data: string}[]) {
+    const team = data.teams.find(t => t.id === row.team_id);
+    if (team) team.formationPresets = JSON.parse(row.data);
+  }
+  for (const [table, key] of [
+    ["players", "players"],
+    ["fixtures", "matches"],
+  ] as const) {
+    data[key] = (
+      (await db
+        .prepare(`SELECT data FROM ${table} WHERE club_id=? ORDER BY rowid`)
+        .all(clubId)) as { data: string }[]
+    ).map((r) => JSON.parse(r.data));
+  }
+  const docs = (await db
+    .prepare(
+      "SELECT fixture_id,kind,data FROM fixture_documents WHERE club_id=?",
+    )
+    .all(clubId)) as {
+    fixture_id: string;
+    kind: "lineups" | "captainTasks" | "reviews";
+    data: string;
+  }[];
+  for (const row of docs)
+    if (canManage(club.role) || (row.kind === "lineups" && JSON.parse(row.data).formation?.status !== "draft"))
+      data[row.kind][row.fixture_id] = JSON.parse(row.data);
+  // Coordinates are derived, including line orientation updates in existing documents.
+  for (const [id, lineup] of Object.entries(data.lineups))
+    if (lineup.formation) data.lineups[id] = withFormation(lineup, lineup.formation);
+  if (canManage(club.role))
+    for (const row of (await db
+      .prepare("SELECT player_id,data FROM assessments WHERE club_id=?")
+      .all(clubId)) as { player_id: string; data: string }[])
+      data.assessments[row.player_id] = JSON.parse(row.data);
+  const { revision } = (await db
+    .prepare("SELECT revision FROM clubs WHERE id=?")
+    .get(clubId)) as { revision: number };
+  return { club, data, revision };
 }
 export async function writeClub(
   userId: string,
@@ -79,26 +114,47 @@ export async function writeClub(
   revision: number,
   input: unknown,
 ) {
-  const data = snapshotSchema.parse(input);
+  let data = snapshotSchema.parse(input);
   const db = getStore();
   return db
     .transaction(async () => {
       await lockClub(clubId);
       const club = (await requireClub(userId, clubId, true));
-      const current = (await readClub(userId, clubId));
+      const current = await readClubData(club);
+      const visible = club.teamIds === null ? current.data : selectTeams(current.data, new Set(club.teamIds));
       if (current.revision !== revision)
         throw new AccessError(
           409,
           "Another user has saved changes. Export your draft, then reload before editing.",
         );
       if (
-        !canAdmin(club.role) &&
-        JSON.stringify(current.data.teams.map(t => ({ id: t.id, name: t.name }))) !== JSON.stringify(data.teams.map(t => ({ id: t.id, name: t.name })))
+        (!canAdmin(club.role) || club.teamIds !== null) &&
+        JSON.stringify(visible.teams.map(t => ({ id: t.id, name: t.name }))) !== JSON.stringify(data.teams.map(t => ({ id: t.id, name: t.name })))
       )
         throw new AccessError(
           403,
           "Only club administrators can change teams.",
         );
+      if (club.teamIds !== null) {
+        const allowed = new Set(club.teamIds);
+        if (data.teams.some(t => !allowed.has(t.id)))
+          throw new AccessError(403, "You do not have permission for this team.");
+        const hidden = selectTeams(current.data, new Set(current.data.teams.filter(t => !allowed.has(t.id)).map(t => t.id)));
+        const hiddenPlayerIds = new Set(hidden.players.map(p => p.id));
+        const hiddenMatchIds = new Set(hidden.matches.map(m => m.id));
+        if (data.players.some(p => hiddenPlayerIds.has(p.id)) || data.matches.some(m => hiddenMatchIds.has(m.id)))
+          throw new AccessError(403, "You do not have permission for these records.");
+        // Preserve all other teams and their documents when the client saves its partial workspace.
+        const editedTeams = new Map(data.teams.map(t => [t.id, t]));
+        data = snapshotSchema.parse({
+          teams: current.data.teams.map(t => editedTeams.get(t.id) ?? t),
+          players: [...hidden.players, ...data.players], matches: [...hidden.matches, ...data.matches],
+          lineups: { ...hidden.lineups, ...data.lineups },
+          captainTasks: { ...hidden.captainTasks, ...data.captainTasks },
+          reviews: { ...hidden.reviews, ...data.reviews },
+          assessments: { ...hidden.assessments, ...data.assessments },
+        });
+      }
       // Integration-owned fixtures may only be changed by the sync service.
       // Removing their whole team is still available to club administrators.
       const keptTeams = new Set(data.teams.map((t) => t.id));

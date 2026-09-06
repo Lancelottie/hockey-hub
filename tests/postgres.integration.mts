@@ -1,3 +1,4 @@
+import { checkTeamAccess } from "./helpers/team-access.mts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
@@ -42,6 +43,7 @@ test("PostgreSQL transfer, imported login, persistence, concurrency, permissions
   data.matches = [{ id: "fixture", teamId: "team", opponent: "Visitors", date: "", isHome: true }];
   data.lineups.fixture = assignPlayer(withFormation({ placements: [], subs: [null, null, null, null] }, { name: "", lines: [3, 4, 3], status: "draft", assignments: {} }), "line-2-0", "player");
   await writeClub(user.user.id, "club", 0, data);
+  source.prepare("INSERT INTO membership_team_access VALUES(?,?,?)").run(user.user.id, "club", '["team"]');
   try {
     await admin.query(`CREATE SCHEMA "${schema}"`);
     const scoped = new URL(targetUrl);
@@ -52,6 +54,8 @@ test("PostgreSQL transfer, imported login, persistence, concurrency, permissions
     await getPool().query(postgresSchema);
     await getPool().query(postgresSchema); // idempotent application migration
     const result = await importSqlite(source, getPool());
+    assert.equal(result.counts.membership_team_access, 1);
+    assert.deepEqual((await readClub(user.user.id, "club")).club.teamIds, ["team"]);
     assert.equal(result.counts.user, 1);
     assert.equal(result.counts.fixtures, 1);
     assert.equal(result.alreadyImported, false);
@@ -82,6 +86,7 @@ test("PostgreSQL transfer, imported login, persistence, concurrency, permissions
     await assert.rejects(importSqlite(source, getPool()), /different import/);
     await getPool().query("UPDATE app_accounts SET status='suspended' WHERE user_id=$1", [user.user.id]);
     assert.equal((await GET(new Request("http://localhost:3000/api/workspace", { headers: { cookie } }))).status, 401);
+    await checkTeamAccess();
   } finally {
     await closePostgres();
     await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
