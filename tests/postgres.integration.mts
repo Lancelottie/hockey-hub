@@ -1,0 +1,92 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { Pool } from "pg";
+import { getMigrations } from "better-auth/db/migration";
+import { createAuth, getAuth } from "../lib/auth";
+import { getDb, migrateApp } from "../lib/db";
+import { getPool, getStore, closePostgres } from "../lib/database";
+import { postgresSchema } from "../lib/postgres-schema";
+import { importSqlite } from "../lib/postgres-import";
+import { readClub, writeClub, AccessError } from "../lib/repository";
+import { emptySnapshot } from "../lib/validation";
+import { GET } from "../app/api/workspace/route";
+import { assignPlayer, withFormation } from "../lib/formation";
+
+// Run explicitly against a hosted database. All test data lives in a random, isolated schema.
+test("PostgreSQL transfer, imported login, persistence, concurrency, permissions and rollback", async () => {
+  const targetUrl = process.env.DATABASE_URL;
+  assert.ok(targetUrl, "Set DATABASE_URL for the PostgreSQL integration test.");
+  const schema = `test_hockey_${randomBytes(8).toString("hex")}`;
+  const admin = new Pool({ connectionString: targetUrl, max: 1 });
+  const directory = mkdtempSync(join(tmpdir(), "hockey-pg-"));
+  process.env.DATABASE_PATH = join(directory, "source.sqlite");
+  process.env.BETTER_AUTH_SECRET = randomBytes(48).toString("base64url");
+  process.env.BETTER_AUTH_URL = "http://localhost:3000";
+  delete process.env.DATABASE_URL;
+  const sourceAuth = createAuth(true);
+  await (await getMigrations(sourceAuth.options)).runMigrations();
+  migrateApp();
+  const password = randomBytes(24).toString("base64url");
+  const user = await sourceAuth.api.signUpEmail({ body: { email: "migration@example.test", name: "Migration test", password } });
+  const source = getDb();
+  source.prepare("INSERT INTO app_accounts(user_id) VALUES(?)").run(user.user.id);
+  source.exec("INSERT INTO clubs(id,name) VALUES('club','Test club')");
+  source.prepare("INSERT INTO club_memberships VALUES(?,?,?)").run(user.user.id, "club", "club_admin");
+  const data = emptySnapshot();
+  data.teams = [{ id: "team", name: "Test team", formationPresets: [{ name: "Custom", lines: [3, 3, 2, 2] }] }];
+  data.players = [{ id: "player", teamId: "team", name: "Test player", number: 7, position: "Forward" }];
+  data.matches = [{ id: "fixture", teamId: "team", opponent: "Visitors", date: "", isHome: true }];
+  data.lineups.fixture = assignPlayer(withFormation({ placements: [], subs: [null, null, null, null] }, { name: "", lines: [3, 4, 3], status: "draft", assignments: {} }), "line-2-0", "player");
+  await writeClub(user.user.id, "club", 0, data);
+  try {
+    await admin.query(`CREATE SCHEMA "${schema}"`);
+    const scoped = new URL(targetUrl);
+    scoped.searchParams.set("options", `-c search_path=${schema}`);
+    process.env.DATABASE_URL = scoped.toString();
+    const pgAuth = createAuth(true);
+    await (await getMigrations(pgAuth.options)).runMigrations();
+    await getPool().query(postgresSchema);
+    await getPool().query(postgresSchema); // idempotent application migration
+    const result = await importSqlite(source, getPool());
+    assert.equal(result.counts.user, 1);
+    assert.equal(result.counts.fixtures, 1);
+    assert.equal(result.alreadyImported, false);
+    assert.equal((await importSqlite(source, getPool())).alreadyImported, true);
+    const loaded = await readClub(user.user.id, "club");
+    assert.deepEqual(loaded.data, data);
+    const response = await getAuth().api.signInEmail({ body: { email: "migration@example.test", password }, asResponse: true });
+    assert.equal(response.status, 200);
+    const cookie = response.headers.get("set-cookie")!.split(";")[0];
+    const workspace = await GET(new Request("http://localhost:3000/api/workspace", { headers: { cookie } }));
+    assert.equal(workspace.status, 200);
+    assert.equal((await workspace.json()).data.players.length, 1);
+    const a = structuredClone(data), b = structuredClone(data);
+    a.players[0].name = "First writer"; b.players[0].name = "Second writer";
+    const writes = await Promise.allSettled([writeClub(user.user.id, "club", loaded.revision, a), writeClub(user.user.id, "club", loaded.revision, b)]);
+    assert.equal(writes.filter(w => w.status === "fulfilled").length, 1);
+    const rejected = writes.find(w => w.status === "rejected") as PromiseRejectedResult;
+    assert.ok(rejected.reason instanceof AccessError && rejected.reason.status === 409);
+    await assert.rejects(getStore().transaction(async () => {
+      await getStore().prepare("INSERT INTO clubs(id,name) VALUES(?,?)").run("rollback", "Rollback");
+      throw new Error("deliberate rollback");
+    }).immediate(), /deliberate rollback/);
+    assert.equal((await getPool().query("SELECT id FROM clubs WHERE id='rollback'")).rowCount, 0);
+    await getPool().query("UPDATE club_memberships SET role='player' WHERE user_id=$1", [user.user.id]);
+    assert.deepEqual((await readClub(user.user.id, "club")).data.lineups, {});
+    await assert.rejects(writeClub(user.user.id, "club", loaded.revision + 1, data), AccessError);
+    source.exec("UPDATE clubs SET name='Changed source' WHERE id='club'");
+    await assert.rejects(importSqlite(source, getPool()), /different import/);
+    await getPool().query("UPDATE app_accounts SET status='suspended' WHERE user_id=$1", [user.user.id]);
+    assert.equal((await GET(new Request("http://localhost:3000/api/workspace", { headers: { cookie } }))).status, 401);
+  } finally {
+    await closePostgres();
+    await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    await admin.end();
+    source.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

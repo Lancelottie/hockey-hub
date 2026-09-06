@@ -12,7 +12,12 @@ const { getAuth } = await import("../lib/auth");
 const { migrateApp } = await import("../lib/db");
 const { getMigrations } = await import("better-auth/db/migration");
 await (await getMigrations(getAuth().options)).runMigrations();
-migrateApp();
+if (process.env.DATABASE_URL) {
+  const { getPool, closePostgres } = await import("../lib/database");
+  const { postgresSchema } = await import("../lib/postgres-schema");
+  await getPool().query(postgresSchema);
+  await closePostgres();
+} else migrateApp();
 console.log(
   "Database ready. Run npm run user:add to provision an account. No default account was created.",
 );

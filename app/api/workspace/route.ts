@@ -2,6 +2,7 @@ import { getActiveSession } from "@/lib/session";
 import { AccessError, listClubs, readClub, writeClub } from "@/lib/repository";
 import { saveSchema } from "@/lib/validation";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 function failure(error: unknown) {
   if (error instanceof AccessError)
     return Response.json({ error: error.message }, { status: error.status });
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
     const session = await getActiveSession(request.headers);
     if (!session)
       return Response.json({ error: "Sign in to continue." }, { status: 401 });
-    const clubs = listClubs(session.user.id);
+    const clubs = (await listClubs(session.user.id));
     const id = new URL(request.url).searchParams.get("clubId") ?? clubs[0]?.id;
     if (!id)
       return Response.json(
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
       );
     return Response.json(
       {
-        ...readClub(session.user.id, id),
+        ...(await readClub(session.user.id, id)),
         clubs,
         user: { name: session.user.name },
       },
@@ -88,7 +89,7 @@ export async function PUT(request: Request) {
       );
     const { clubId, revision, data } = parsed.data;
     return Response.json(
-      { revision: writeClub(session.user.id, clubId, revision, data) },
+      { revision: (await writeClub(session.user.id, clubId, revision, data)) },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

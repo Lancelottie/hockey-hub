@@ -267,7 +267,7 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
         sourceUrl,
       });
       assert.equal(first.added, 2);
-      const before = readClub(users.club_admin, "a");
+      const before = (await readClub(users.club_admin, "a"));
       const id = before.data.matches[0].id;
       db.prepare("INSERT INTO fixture_documents VALUES(?,?,?,?)").run(
         "a",
@@ -279,7 +279,7 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
       assert.equal(second.unchanged, 2);
       assert.equal(second.added, 0);
       assert.equal(second.updated, 0);
-      const after = readClub(users.club_admin, "a");
+      const after = (await readClub(users.club_admin, "a"));
       assert.deepEqual(
         after.data.matches.map((f) => f.id),
         before.data.matches.map((f) => f.id),
@@ -303,13 +303,13 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
       });
       changed[0].fixtures[0].awayTeam.teamName = "Liverpool Sefton 3";
       changed[0].fixtures[1].statusDescription = "Cancelled";
-      const before = readClub(users.club_admin, "a").data.matches;
+      const before = (await readClub(users.club_admin, "a")).data.matches;
       const result = await syncEnglandHockeyFixtures("one", {
         ...opts,
         fetcher: remote(changed),
       });
       assert.equal(result.updated, 2);
-      const matches = readClub(users.club_admin, "a").data.matches;
+      const matches = (await readClub(users.club_admin, "a")).data.matches;
       assert.equal(matches[0].id, before[0].id);
       assert.equal(matches[0].date, "2026-10-03T13:30");
       assert.equal(matches[0].venue, "New pitch");
@@ -322,7 +322,7 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
   await t.test(
     "failed or empty sync never deletes fixtures or replaces a saved URL",
     async () => {
-      const before = readClub(users.club_admin, "a");
+      const before = (await readClub(users.club_admin, "a"));
       await assert.rejects(
         syncEnglandHockeyFixtures("one", {
           ...opts,
@@ -330,10 +330,10 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
           fetcher: remote({ bad: true }),
         }),
       );
-      assert.deepEqual(readClub(users.club_admin, "a"), before);
-      assert.equal(getFixtureSource("a", "one")?.sourceUrl, sourceUrl);
+      assert.deepEqual((await readClub(users.club_admin, "a")), before);
+      assert.equal((await getFixtureSource("a", "one"))?.sourceUrl, sourceUrl);
       await syncEnglandHockeyFixtures("one", { ...opts, fetcher: remote([]) });
-      assert.equal(readClub(users.club_admin, "a").data.matches.length, 2);
+      assert.equal((await readClub(users.club_admin, "a")).data.matches.length, 2);
     },
   );
   await t.test(
@@ -350,9 +350,9 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
         fetcher,
       });
       assert.equal(result.added, 1);
-      assert.equal(getFixtureSource("a", "one")?.sourceUrl, sourceUrl);
-      assert.equal(getFixtureSource("a", "two")?.sourceUrl, otherUrl);
-      const second = readClub(users.club_admin, "a").data.matches.find(
+      assert.equal((await getFixtureSource("a", "one"))?.sourceUrl, sourceUrl);
+      assert.equal((await getFixtureSource("a", "two"))?.sourceUrl, otherUrl);
+      const second = (await readClub(users.club_admin, "a")).data.matches.find(
         (f) => f.teamId === "two",
       )!;
       assert.equal(second.isHome, true);
@@ -369,24 +369,24 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
   );
   await t.test(
     "workspace saves retain integration settings and metadata; stale drafts and tampering are rejected",
-    () => {
-      const current = readClub(users.club_admin, "a");
+    async () => {
+      const current = (await readClub(users.club_admin, "a"));
       const parsed = snapshotSchema.parse(current.data);
       parsed.teams[0].name = "Updated team name";
-      writeClub(users.club_admin, "a", current.revision, parsed);
-      assert.ok(getFixtureSource("a", "one"));
-      assert.ok(getFixtureSource("a", "two"));
+      (await writeClub(users.club_admin, "a", current.revision, parsed));
+      assert.ok((await getFixtureSource("a", "one")));
+      assert.ok((await getFixtureSource("a", "two")));
       assert.deepEqual(
-        readClub(users.club_admin, "a").data.matches,
+        (await readClub(users.club_admin, "a")).data.matches,
         current.data.matches,
       );
-      assert.throws(
-        () => writeClub(users.club_admin, "a", current.revision, parsed),
+      await assert.rejects(
+        async () => (await writeClub(users.club_admin, "a", current.revision, parsed)),
         /Another user/,
       );
       parsed.matches[0].opponent = "Forged";
-      assert.throws(
-        () => writeClub(users.club_admin, "a", current.revision + 1, parsed),
+      await assert.rejects(
+        async () => (await writeClub(users.club_admin, "a", current.revision + 1, parsed)),
         /Imported fixtures/,
       );
     },
@@ -399,12 +399,12 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
           db.prepare("UPDATE clubs SET revision=revision+1 WHERE id='a'").run();
         return remote()(url, init);
       };
-      const before = readClub(users.club_admin, "a").data;
+      const before = (await readClub(users.club_admin, "a")).data;
       await assert.rejects(
         syncEnglandHockeyFixtures("one", { ...opts, fetcher }),
         /Someone saved/,
       );
-      assert.deepEqual(readClub(users.club_admin, "a").data, before);
+      assert.deepEqual((await readClub(users.club_admin, "a")).data, before);
       const revoke: RemoteFetch = async (url, init) => {
         if (String(url).includes("/api/"))
           db.prepare(
@@ -445,7 +445,7 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
       const body = {
         teamId: "one",
         clubId: "a",
-        revision: readClub(users.club_admin, "a").revision,
+        revision: (await readClub(users.club_admin, "a")).revision,
       };
       assert.equal((await POST(request("none", body))).status, 401);
       for (const role of ["player", "read_only"]) {
@@ -506,7 +506,7 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
           request("manager", {
             clubId: "a",
             teamId: "one",
-            revision: readClub(users.manager, "a").revision,
+            revision: (await readClub(users.manager, "a")).revision,
           }),
         );
         assert.equal(response.status, 200);
@@ -521,15 +521,15 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
   );
   await t.test(
     "team deletion cleans its source while other teams remain configured",
-    () => {
-      const current = readClub(users.club_admin, "a");
+    async () => {
+      const current = (await readClub(users.club_admin, "a"));
       current.data.teams = current.data.teams.filter((t) => t.id !== "two");
       current.data.matches = current.data.matches.filter(
         (f) => f.teamId !== "two",
       );
-      writeClub(users.club_admin, "a", current.revision, current.data);
-      assert.equal(getFixtureSource("a", "two"), null);
-      assert.ok(getFixtureSource("a", "one"));
+      (await writeClub(users.club_admin, "a", current.revision, current.data));
+      assert.equal((await getFixtureSource("a", "two")), null);
+      assert.ok((await getFixtureSource("a", "one")));
     },
   );
 });

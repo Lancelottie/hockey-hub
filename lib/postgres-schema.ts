@@ -1,29 +1,6 @@
-import Database from "better-sqlite3";
-import { migrateEnglandHockey } from "./england-hockey/migration";
-import { mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-
-let connection: Database.Database | undefined;
-export function getDb() {
-  if (process.env.VERCEL) throw new Error("SQLite is unavailable on Vercel. Configure DATABASE_URL.");
-  if (!connection) {
-    const path = resolve(
-      /* turbopackIgnore: true */ process.env.DATABASE_PATH ??
-        "data/hockey-hub.sqlite",
-    );
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    connection = new Database(path);
-    connection.pragma("journal_mode = WAL");
-    connection.pragma("foreign_keys = ON");
-    connection.pragma("busy_timeout = 5000");
-  }
-  return connection;
-}
-
-export function migrateApp() {
-  getDb().exec(`
+export const postgresSchema = `
     CREATE TABLE IF NOT EXISTS app_accounts (
-      user_id TEXT PRIMARY KEY REFERENCES user(id) ON DELETE CASCADE,
+      user_id TEXT PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended')),
       last_login TEXT
     );
@@ -32,12 +9,13 @@ export function migrateApp() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS club_memberships (
-      user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
       club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
       role TEXT NOT NULL CHECK(role IN ('administrator','club_admin','manager','coach','player','read_only')),
       PRIMARY KEY(user_id, club_id)
     );
     CREATE TABLE IF NOT EXISTS teams (
+      rowid BIGSERIAL UNIQUE,
       club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
       id TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY(club_id,id)
     );
@@ -47,10 +25,12 @@ export function migrateApp() {
       FOREIGN KEY(club_id,team_id) REFERENCES teams(club_id,id) ON DELETE CASCADE
     );
     CREATE TABLE IF NOT EXISTS players (
+      rowid BIGSERIAL UNIQUE,
       club_id TEXT NOT NULL, id TEXT NOT NULL, team_id TEXT NOT NULL, data TEXT NOT NULL,
       PRIMARY KEY(club_id,id), FOREIGN KEY(club_id,team_id) REFERENCES teams(club_id,id)
     );
     CREATE TABLE IF NOT EXISTS fixtures (
+      rowid BIGSERIAL UNIQUE,
       club_id TEXT NOT NULL, id TEXT NOT NULL, team_id TEXT NOT NULL, data TEXT NOT NULL,
       PRIMARY KEY(club_id,id), FOREIGN KEY(club_id,team_id) REFERENCES teams(club_id,id)
     );
@@ -64,9 +44,22 @@ export function migrateApp() {
       PRIMARY KEY(club_id,player_id), FOREIGN KEY(club_id,player_id) REFERENCES players(club_id,id) ON DELETE CASCADE
     );
     CREATE TABLE IF NOT EXISTS audit_events (
-      id INTEGER PRIMARY KEY, user_id TEXT NOT NULL, club_id TEXT NOT NULL,
+      id BIGSERIAL PRIMARY KEY, user_id TEXT NOT NULL, club_id TEXT NOT NULL,
       action TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-  `);
-  migrateEnglandHockey(getDb());
-}
+
+    CREATE TABLE IF NOT EXISTS team_fixture_sources (
+      club_id TEXT NOT NULL, team_id TEXT NOT NULL,
+      source_url TEXT NOT NULL, external_team_id TEXT NOT NULL, team_name TEXT NOT NULL,
+      last_synced_at TEXT NOT NULL,
+      PRIMARY KEY(club_id,team_id),
+      FOREIGN KEY(club_id,team_id) REFERENCES teams(club_id,id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS fixtures_england_hockey_key
+      ON fixtures(club_id,team_id,(data::jsonb ->> 'externalKey'))
+      WHERE data::jsonb ->> 'externalSource' = 'england-hockey';
+    CREATE TABLE IF NOT EXISTS data_migrations (
+      id TEXT PRIMARY KEY, source_digest TEXT NOT NULL, counts TEXT NOT NULL,
+      completed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+`;

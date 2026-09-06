@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { getDb } from "../db";
+import { getStore, lockClub } from "../database";
 import { AccessError, requireClub } from "../repository";
 import type { Match } from "../types";
 import {
@@ -15,38 +15,38 @@ export type FixtureSource = {
   teamName: string;
   lastSyncedAt: string;
 };
-export function getFixtureSource(
+export async function getFixtureSource(
   clubId: string,
   teamId: string,
-): FixtureSource | null {
+): Promise<FixtureSource | null> {
   return (
-    (getDb()
+    ((await getStore()
       .prepare(
-        `SELECT source_url AS sourceUrl, external_team_id AS externalTeamId,
-    team_name AS teamName, last_synced_at AS lastSyncedAt FROM team_fixture_sources WHERE club_id=? AND team_id=?`,
+        `SELECT source_url AS "sourceUrl", external_team_id AS "externalTeamId",
+    team_name AS "teamName", last_synced_at AS "lastSyncedAt" FROM team_fixture_sources WHERE club_id=? AND team_id=?`,
       )
-      .get(clubId, teamId) as FixtureSource | undefined) ?? null
+      .get(clubId, teamId)) as FixtureSource | undefined) ?? null
   );
 }
-function requireTeam(clubId: string, teamId: string) {
+async function requireTeam(clubId: string, teamId: string) {
   if (
-    !getDb()
+    !(await getStore()
       .prepare("SELECT 1 FROM teams WHERE club_id=? AND id=?")
-      .get(clubId, teamId)
+      .get(clubId, teamId))
   )
     throw new AccessError(
       404,
       "Choose an existing team before importing fixtures.",
     );
 }
-export function readFixtureSource(
+export async function readFixtureSource(
   userId: string,
   clubId: string,
   teamId: string,
 ) {
-  requireClub(userId, clubId, true);
-  requireTeam(clubId, teamId);
-  return getFixtureSource(clubId, teamId);
+  (await requireClub(userId, clubId, true));
+  (await requireTeam(clubId, teamId));
+  return (await getFixtureSource(clubId, teamId));
 }
 export type SyncOptions = {
   clubId: string;
@@ -62,15 +62,15 @@ export async function syncEnglandHockeyFixtures(
   options: SyncOptions,
 ) {
   const { clubId, actor } = options;
-  const authorize = () => {
-    if ("userId" in actor) requireClub(actor.userId, clubId, true);
-    requireTeam(clubId, teamId);
+  const authorize = async () => {
+    if ("userId" in actor) (await requireClub(actor.userId, clubId, true));
+    (await requireTeam(clubId, teamId));
   };
-  authorize();
-  const db = getDb();
-  const { revision } = db
+  (await authorize());
+  const db = getStore();
+  const { revision } = (await db
     .prepare("SELECT revision FROM clubs WHERE id=?")
-    .get(clubId) as { revision: number };
+    .get(clubId)) as { revision: number };
   if (
     options.expectedRevision !== undefined &&
     options.expectedRevision !== revision
@@ -79,27 +79,28 @@ export async function syncEnglandHockeyFixtures(
       409,
       "Your club has changed. Reload before syncing fixtures.",
     );
-  const previousSource = getFixtureSource(clubId, teamId);
+  const previousSource = (await getFixtureSource(clubId, teamId));
   const url = options.sourceUrl ?? previousSource?.sourceUrl;
   if (!url)
     throw new EnglandHockeyError("Enter this team's England Hockey URL first.");
   const remote = await fetchEnglandHockeyFixtures(url, options.fetcher);
   const now = new Date().toISOString();
   return db
-    .transaction(() => {
-      authorize(); // Membership or team may have changed while the remote request was running.
-      const current = db
+    .transaction(async () => {
+      await lockClub(clubId);
+      (await authorize()); // Membership or team may have changed while the remote request was running.
+      const current = (await db
         .prepare("SELECT revision FROM clubs WHERE id=?")
-        .get(clubId) as { revision: number };
+        .get(clubId)) as { revision: number };
       if (current.revision !== revision)
         throw new AccessError(
           409,
           "Someone saved club changes during the import. Reload and try syncing again. No fixtures were changed.",
         );
       const existing = (
-        db
+        (await db
           .prepare("SELECT data FROM fixtures WHERE club_id=? AND team_id=?")
-          .all(clubId, teamId) as { data: string }[]
+          .all(clubId, teamId)) as { data: string }[]
       ).map((r) => JSON.parse(r.data) as Match);
       if (
         existing.some(
@@ -138,19 +139,19 @@ export async function syncEnglandHockeyFixtures(
           next.updatedAt = now;
         }
         next.lastSyncedAt = now;
-        db.prepare(
+        (await db.prepare(
           `INSERT INTO fixtures(club_id,id,team_id,data) VALUES(?,?,?,?)
         ON CONFLICT(club_id,id) DO UPDATE SET data=excluded.data`,
-        ).run(clubId, next.id, teamId, JSON.stringify(next));
+        ).run(clubId, next.id, teamId, JSON.stringify(next)));
       }
-      const total = db
+      const total = (await db
         .prepare("SELECT count(*) AS n FROM fixtures WHERE club_id=?")
-        .get(clubId) as { n: number };
+        .get(clubId)) as { n: number };
       if (total.n > 3000)
         throw new EnglandHockeyError(
           "This import would exceed the club's 3,000-fixture limit. No fixtures were changed.",
         );
-      db.prepare(
+      (await db.prepare(
         `INSERT INTO team_fixture_sources VALUES(?,?,?,?,?,?) ON CONFLICT(club_id,team_id)
       DO UPDATE SET source_url=excluded.source_url,external_team_id=excluded.external_team_id,team_name=excluded.team_name,last_synced_at=excluded.last_synced_at`,
       ).run(
@@ -160,15 +161,15 @@ export async function syncEnglandHockeyFixtures(
         remote.externalTeamId,
         remote.teamName,
         now,
-      );
-      db.prepare("UPDATE clubs SET revision=revision+1 WHERE id=?").run(clubId);
-      db.prepare(
+      ));
+      (await db.prepare("UPDATE clubs SET revision=revision+1 WHERE id=?").run(clubId));
+      (await db.prepare(
         "INSERT INTO audit_events(user_id,club_id,action) VALUES(?,?,?)",
       ).run(
         "userId" in actor ? actor.userId : "system:england-hockey",
         clubId,
         `england-hockey-sync:${teamId}:${added}/${updated}/${unchanged}`,
-      );
+      ));
       return {
         checked: remote.fixtures.length,
         added,

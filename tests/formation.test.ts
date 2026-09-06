@@ -55,7 +55,7 @@ test("eligibility prioritises squad then availability then team, including empty
 const dir = mkdtempSync(join(tmpdir(), "hockey-formation-"));
 process.env.DATABASE_PATH = join(dir, "test.sqlite");
 after(() => { getDb().close(); rmSync(dir, { recursive: true, force: true }); });
-test("SQLite persistence, correct fixture/team, presets, permissions and publication", () => {
+test("SQLite persistence, correct fixture/team, presets, permissions and publication", async () => {
   const db = getDb();
   db.exec("CREATE TABLE user (id TEXT PRIMARY KEY)");
   migrateApp();
@@ -66,26 +66,26 @@ test("SQLite persistence, correct fixture/team, presets, permissions and publica
   data.matches = ["fixture", "second"].map(id => ({ id, teamId: "team", opponent: "Opposition", date: "", isHome: true }));
   // Managers can save presets but cannot create teams.
   db.prepare("UPDATE club_memberships SET role='club_admin' WHERE user_id='captain'").run();
-  writeClub("captain", "club", 0, data);
+  (await writeClub("captain", "club", 0, data));
   db.prepare("UPDATE club_memberships SET role='manager' WHERE user_id='captain'").run();
   data.teams[0].formationPresets = [{ name: "High press", lines: [3, 3, 2, 2] }];
   data.lineups.fixture = assignPlayer(empty(), "gk", "p10");
-  writeClub("captain", "club", 1, data);
-  const reload = readClub("captain", "club");
+  (await writeClub("captain", "club", 1, data));
+  const reload = (await readClub("captain", "club"));
   assert.deepEqual(reload.data.lineups.fixture, data.lineups.fixture);
   assert.equal(reload.data.lineups.second, undefined);
   assert.deepEqual(reload.data.teams[0].formationPresets, data.teams[0].formationPresets);
   assert.equal(generateSlots(reload.data.teams[0].formationPresets![0].lines).length, 11);
-  assert.deepEqual(readClub("reader", "club").data.lineups, {});
-  assert.throws(() => writeClub("reader", "club", 2, data), AccessError);
-  assert.throws(() => readClub("other", "club"), AccessError);
-  assert.throws(() => writeClub("captain", "club", 1, data), /Another user/);
+  assert.deepEqual((await readClub("reader", "club")).data.lineups, {});
+  await assert.rejects(async () => (await writeClub("reader", "club", 2, data)), AccessError);
+  await assert.rejects(async () => (await readClub("other", "club")), AccessError);
+  await assert.rejects(async () => (await writeClub("captain", "club", 1, data)), /Another user/);
   let filled = empty();
   generateSlots([3, 4, 3]).forEach((slot, i) => { filled = assignPlayer(filled, slot.id, `p${i}`); });
   filled.formation!.status = "published";
   data.lineups.fixture = filled;
-  writeClub("captain", "club", 2, data);
-  assert.deepEqual(readClub("reader", "club").data.lineups.fixture, filled);
+  (await writeClub("captain", "club", 2, data));
+  assert.deepEqual((await readClub("reader", "club")).data.lineups.fixture, filled);
   const invalid = structuredClone(data);
   invalid.lineups.fixture.subs[0] = "p0";
   assert.equal(snapshotSchema.safeParse(invalid).success, false);

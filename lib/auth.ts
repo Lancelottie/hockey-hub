@@ -1,5 +1,5 @@
 import { betterAuth } from "better-auth";
-import { getDb } from "./db";
+import { authDatabase, getStore } from "./database";
 
 export function createAuth(provisioning = false) {
   const secret = process.env.BETTER_AUTH_SECRET;
@@ -16,7 +16,7 @@ export function createAuth(provisioning = false) {
     throw new Error("Production authentication requires HTTPS.");
   }
   return betterAuth({
-    database: getDb(),
+    database: authDatabase(),
     secret,
     baseURL,
     trustedOrigins: [new URL(baseURL).origin],
@@ -42,11 +42,11 @@ export function createAuth(provisioning = false) {
       session: {
         create: {
           after: async (session) => {
-            getDb()
+            (await getStore()
               .prepare(
                 "UPDATE app_accounts SET last_login = CURRENT_TIMESTAMP WHERE user_id = ?",
               )
-              .run(session.userId);
+              .run(session.userId));
           },
         },
       },

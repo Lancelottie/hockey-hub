@@ -7,6 +7,7 @@ import {
   syncEnglandHockeyFixtures,
 } from "@/lib/england-hockey/sync";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 const id = z
   .string()
   .min(1)
@@ -41,11 +42,11 @@ export async function GET(request: Request) {
     );
     if (!parsed.success) return json({ error: "Choose a club and team." }, 400);
     return json({
-      source: readFixtureSource(
+      source: (await readFixtureSource(
         session.user.id,
         parsed.data.clubId,
         parsed.data.teamId,
-      ),
+      )),
     });
   } catch (error) {
     return failure(error);
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
       expectedRevision: revision,
       actor: { userId: session.user.id },
     });
-    return json({ ...result, workspace: readClub(session.user.id, clubId) });
+    return json({ ...result, workspace: (await readClub(session.user.id, clubId)) });
   } catch (error) {
     return failure(error);
   }

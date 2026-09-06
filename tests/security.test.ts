@@ -105,20 +105,20 @@ test("authentication, tenant boundaries, validation, concurrency and legacy migr
       401,
     );
   });
-  await t.test("membership is mandatory, even with a known club ID", () => {
-    assert.throws(() => readClub(bob.user.id, "a"), AccessError);
-    assert.throws(() => writeClub(bob.user.id, "a", 0, data), AccessError);
+  await t.test("membership is mandatory, even with a known club ID", async () => {
+    await assert.rejects(async () => (await readClub(bob.user.id, "a")), AccessError);
+    await assert.rejects(async () => (await writeClub(bob.user.id, "a", 0, data)), AccessError);
   });
-  await t.test("read-only member cannot mutate", () => {
-    assert.throws(() => writeClub(reader.user.id, "a", 0, data), AccessError);
+  await t.test("read-only member cannot mutate", async () => {
+    await assert.rejects(async () => (await writeClub(reader.user.id, "a", 0, data)), AccessError);
   });
   await t.test(
     "transaction round-trips selection; stale writer gets conflict",
-    () => {
-      assert.equal(writeClub(alice.user.id, "a", 0, data), 1);
-      assert.deepEqual(readClub(alice.user.id, "a").data, data);
-      assert.throws(
-        () => writeClub(alice.user.id, "a", 0, data),
+    async () => {
+      assert.equal((await writeClub(alice.user.id, "a", 0, data)), 1);
+      assert.deepEqual((await readClub(alice.user.id, "a")).data, data);
+      await assert.rejects(
+        async () => (await writeClub(alice.user.id, "a", 0, data)),
         (error: unknown) =>
           error instanceof AccessError && error.status === 409,
       );
@@ -147,14 +147,14 @@ test("authentication, tenant boundaries, validation, concurrency and legacy migr
   );
   await t.test(
     "management roles cannot grant themselves team administration",
-    () => {
+    async () => {
       db.prepare(
         "UPDATE club_memberships SET role='manager' WHERE user_id=?",
       ).run(alice.user.id);
       const changed = structuredClone(data);
       changed.teams.push({ id: "new-team", name: "New team" });
-      assert.throws(
-        () => writeClub(alice.user.id, "a", 1, changed),
+      await assert.rejects(
+        async () => (await writeClub(alice.user.id, "a", 1, changed)),
         (error: unknown) =>
           error instanceof AccessError && error.status === 403,
       );
@@ -165,7 +165,7 @@ test("authentication, tenant boundaries, validation, concurrency and legacy migr
   );
   await t.test(
     "read-only responses exclude private feedback and assessments",
-    () => {
+    async () => {
       const privateData = structuredClone(data);
       privateData.reviews["fixture-a"] = {
         ourScore: "1",
@@ -188,8 +188,8 @@ test("authentication, tenant boundaries, validation, concurrency and legacy migr
         teamworkCommunication: 3,
         lastSeasonTeam: "1s",
       };
-      assert.equal(writeClub(alice.user.id, "a", 1, privateData), 2);
-      const visible = readClub(reader.user.id, "a").data;
+      assert.equal((await writeClub(alice.user.id, "a", 1, privateData)), 2);
+      const visible = (await readClub(reader.user.id, "a")).data;
       assert.deepEqual(visible.reviews, {});
       assert.deepEqual(visible.assessments, {});
       assert.equal(visible.players.length, 1);
@@ -292,7 +292,7 @@ test("authentication, tenant boundaries, validation, concurrency and legacy migr
         "UPDATE app_accounts SET status='suspended' WHERE user_id=?",
       ).run(alice.user.id);
       assert.equal(await getActiveSession(new Headers({ cookie })), null);
-      assert.throws(() => readClub(alice.user.id, "a"), AccessError);
+      await assert.rejects(async () => (await readClub(alice.user.id, "a")), AccessError);
       db.prepare("UPDATE app_accounts SET status='active' WHERE user_id=?").run(
         alice.user.id,
       );

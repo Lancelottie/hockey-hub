@@ -4,7 +4,7 @@ Open **Selection** or **Fixtures → a match → Build lineup**. Build a custom 
 
 ## Existing architecture and integration
 
-The app uses Next.js App Router, React client components, Tailwind/CSS variables, Better Auth, and SQLite through better-sqlite3. Teams and players belong to clubs; each player and fixture has a team ID. Existing fixture documents contain lineup placements and four substitute seats. The workspace API loads and saves a validated club snapshot transactionally, with a revision check to reject concurrent overwrites.
+The app uses Next.js App Router, React client components, Tailwind/CSS variables, Better Auth, and either hosted PostgreSQL through pg or local SQLite through better-sqlite3. Teams and players belong to clubs; each player and fixture has a team ID. Existing fixture documents contain lineup placements and four substitute seats. The workspace API loads and saves a validated club snapshot transactionally, with a revision check to reject concurrent overwrites.
 
 The squad-selection page contains training assessments and session attendance, not a fixture squad or match availability. The formation selector therefore uses team players. The eligiblePlayers function accepts optional squad IDs and available-player IDs for future integration, in that priority order. An explicitly empty squad remains empty.
 

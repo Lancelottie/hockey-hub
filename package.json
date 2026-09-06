@@ -12,13 +12,17 @@
     "user:add": "node --import tsx scripts/add-user.mts",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
-    "fixtures:sync": "node --import tsx scripts/sync-england-hockey.mts"
+    "fixtures:sync": "node --import tsx scripts/sync-england-hockey.mts",
+    "db:migrate": "node --import tsx scripts/migrate-postgres.mts",
+    "db:transfer": "node --import tsx scripts/transfer-postgres.mts",
+    "test:postgres": "node --import tsx --test tests/postgres.integration.mts"
   },
   "dependencies": {
     "better-auth": "^1.7.3",
     "better-sqlite3": "^12.11.1",
     "lucide-react": "^0.562.0",
     "next": "^16.2.10",
+    "pg": "^8.23.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "zod": "^4.5.4"
@@ -31,6 +35,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

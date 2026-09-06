@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { ROLES, type Role } from "../lib/users";
 process.loadEnvFile(".env.local");
 const { createAuth } = await import("../lib/auth");
-const { getDb } = await import("../lib/db");
+const { getStore } = await import("../lib/database");
 const prompt = createInterface({
   input: process.stdin,
   output: process.stdout,
@@ -30,10 +30,10 @@ const password = spawnSync(
 if (password.status !== 0 || password.stdout.length < 12)
   throw new Error("A password of at least 12 characters is required.");
 const auth = createAuth(true);
-const db = getDb();
-const existing = db
+const db = getStore();
+const existing = (await db
   .prepare("SELECT id FROM user WHERE email = ?")
-  .get(email.trim().toLowerCase()) as { id: string } | undefined;
+  .get(email.trim().toLowerCase())) as { id: string } | undefined;
 if (existing)
   throw new Error(
     "User exists. Use the documented membership SQL to grant access; password was not changed.",
@@ -41,22 +41,22 @@ if (existing)
 const result = await auth.api.signUpEmail({
   body: { email: email.trim(), name: name.trim(), password: password.stdout },
 });
-db.transaction(() => {
-  let club = db
+(await db.transaction(async () => {
+  let club = (await db
     .prepare("SELECT id FROM clubs WHERE name = ?")
-    .get(clubName.trim()) as { id: string } | undefined;
+    .get(clubName.trim())) as { id: string } | undefined;
   if (!club) {
     club = { id: randomUUID() };
-    db.prepare("INSERT INTO clubs(id,name) VALUES(?,?)").run(
+    (await db.prepare("INSERT INTO clubs(id,name) VALUES(?,?)").run(
       club.id,
       clubName.trim(),
-    );
+    ));
   }
-  db.prepare("INSERT INTO app_accounts(user_id) VALUES(?)").run(result.user.id);
-  db.prepare(
+  (await db.prepare("INSERT INTO app_accounts(user_id) VALUES(?)").run(result.user.id));
+  (await db.prepare(
     "INSERT INTO club_memberships(user_id,club_id,role) VALUES(?,?,?)",
-  ).run(result.user.id, club.id, role);
-})();
+  ).run(result.user.id, club.id, role));
+})());
 console.log(
   "Account provisioned. Sign in with the email and password you supplied.",
 );

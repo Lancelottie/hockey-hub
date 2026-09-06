@@ -73,5 +73,5 @@ data.matches = [
     isHome: true,
   },
 ];
-writeClub(user.user.id, "test-club", 0, data);
+(await writeClub(user.user.id, "test-club", 0, data));
 db.close();

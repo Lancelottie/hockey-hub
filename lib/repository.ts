@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { withFormation } from "./formation";
-import { getDb } from "./db";
+import { getStore, lockClub } from "./database";
 import { canAdmin, canManage, type Role } from "./users";
 import { emptySnapshot, snapshotSchema, type Snapshot } from "./validation";
 export class AccessError extends Error {
@@ -12,28 +12,28 @@ export class AccessError extends Error {
   }
 }
 export type ClubAccess = { id: string; name: string; role: Role };
-export function listClubs(userId: string): ClubAccess[] {
-  return getDb()
+export async function listClubs(userId: string): Promise<ClubAccess[]> {
+  return (await getStore()
     .prepare(
       `SELECT c.id,c.name,m.role FROM clubs c JOIN club_memberships m ON m.club_id=c.id JOIN app_accounts a ON a.user_id=m.user_id WHERE m.user_id=? AND a.status='active' ORDER BY c.name`,
     )
-    .all(userId) as ClubAccess[];
+    .all(userId)) as ClubAccess[];
 }
-export function requireClub(userId: string, clubId: string, write = false) {
-  const club = listClubs(userId).find((c) => c.id === clubId);
+export async function requireClub(userId: string, clubId: string, write = false) {
+  const club = (await listClubs(userId)).find((c) => c.id === clubId);
   if (!club || (write && !canManage(club.role)))
     throw new AccessError(403, "You do not have permission for this club.");
   return club;
 }
-export function readClub(userId: string, clubId: string) {
-  const club = requireClub(userId, clubId);
-  const db = getDb();
-  return db.transaction(() => {
+export async function readClub(userId: string, clubId: string) {
+  const club = (await requireClub(userId, clubId));
+  const db = getStore();
+  return (await db.transaction(async () => {
     const data = emptySnapshot();
-    data.teams = db
+    data.teams = (await db
       .prepare("SELECT id,name FROM teams WHERE club_id=? ORDER BY rowid")
-      .all(clubId) as Snapshot["teams"];
-    for (const row of db.prepare("SELECT team_id,data FROM team_formation_presets WHERE club_id=?").all(clubId) as {team_id: string; data: string}[]) {
+      .all(clubId)) as Snapshot["teams"];
+    for (const row of (await db.prepare("SELECT team_id,data FROM team_formation_presets WHERE club_id=?").all(clubId)) as {team_id: string; data: string}[]) {
       const team = data.teams.find(t => t.id === row.team_id);
       if (team) team.formationPresets = JSON.parse(row.data);
     }
@@ -42,16 +42,16 @@ export function readClub(userId: string, clubId: string) {
       ["fixtures", "matches"],
     ] as const) {
       data[key] = (
-        db
+        (await db
           .prepare(`SELECT data FROM ${table} WHERE club_id=? ORDER BY rowid`)
-          .all(clubId) as { data: string }[]
+          .all(clubId)) as { data: string }[]
       ).map((r) => JSON.parse(r.data));
     }
-    const docs = db
+    const docs = (await db
       .prepare(
         "SELECT fixture_id,kind,data FROM fixture_documents WHERE club_id=?",
       )
-      .all(clubId) as {
+      .all(clubId)) as {
       fixture_id: string;
       kind: "lineups" | "captainTasks" | "reviews";
       data: string;
@@ -63,28 +63,29 @@ export function readClub(userId: string, clubId: string) {
     for (const [id, lineup] of Object.entries(data.lineups))
       if (lineup.formation) data.lineups[id] = withFormation(lineup, lineup.formation);
     if (canManage(club.role))
-      for (const row of db
+      for (const row of (await db
         .prepare("SELECT player_id,data FROM assessments WHERE club_id=?")
-        .all(clubId) as { player_id: string; data: string }[])
+        .all(clubId)) as { player_id: string; data: string }[])
         data.assessments[row.player_id] = JSON.parse(row.data);
-    const { revision } = db
+    const { revision } = (await db
       .prepare("SELECT revision FROM clubs WHERE id=?")
-      .get(clubId) as { revision: number };
+      .get(clubId)) as { revision: number };
     return { club, data, revision };
-  })();
+  })());
 }
-export function writeClub(
+export async function writeClub(
   userId: string,
   clubId: string,
   revision: number,
   input: unknown,
 ) {
   const data = snapshotSchema.parse(input);
-  const db = getDb();
+  const db = getStore();
   return db
-    .transaction(() => {
-      const club = requireClub(userId, clubId, true);
-      const current = readClub(userId, clubId);
+    .transaction(async () => {
+      await lockClub(clubId);
+      const club = (await requireClub(userId, clubId, true));
+      const current = (await readClub(userId, clubId));
       if (current.revision !== revision)
         throw new AccessError(
           409,
@@ -121,50 +122,37 @@ export function writeClub(
             403,
             "Use the England Hockey integration to import fixtures.",
           );
-      db.prepare("DELETE FROM fixture_documents WHERE club_id=?").run(clubId);
-      db.prepare("DELETE FROM assessments WHERE club_id=?").run(clubId);
-      db.prepare("DELETE FROM players WHERE club_id=?").run(clubId);
-      db.prepare("DELETE FROM fixtures WHERE club_id=?").run(clubId);
+      (await db.prepare("DELETE FROM fixture_documents WHERE club_id=?").run(clubId));
+      (await db.prepare("DELETE FROM assessments WHERE club_id=?").run(clubId));
+      (await db.prepare("DELETE FROM players WHERE club_id=?").run(clubId));
+      (await db.prepare("DELETE FROM fixtures WHERE club_id=?").run(clubId));
       for (const t of data.teams)
-        db.prepare(
+        (await db.prepare(
           "INSERT INTO teams(club_id,id,name) VALUES(?,?,?) ON CONFLICT(club_id,id) DO UPDATE SET name=excluded.name",
-        ).run(clubId, t.id, t.name);
-      db.prepare("DELETE FROM team_formation_presets WHERE club_id=?").run(clubId);
+        ).run(clubId, t.id, t.name));
+      (await db.prepare("DELETE FROM team_formation_presets WHERE club_id=?").run(clubId));
       for (const t of data.teams)
         if (t.formationPresets)
-          db.prepare("INSERT INTO team_formation_presets VALUES(?,?,?)").run(clubId, t.id, JSON.stringify(t.formationPresets));
+          (await db.prepare("INSERT INTO team_formation_presets VALUES(?,?,?)").run(clubId, t.id, JSON.stringify(t.formationPresets)));
       for (const previous of current.data.teams)
         if (!keptTeams.has(previous.id))
-          db.prepare("DELETE FROM teams WHERE club_id=? AND id=?").run(
+          (await db.prepare("DELETE FROM teams WHERE club_id=? AND id=?").run(
             clubId,
             previous.id,
-          );
-      for (const p of data.players)
-        db.prepare(
-          "INSERT INTO players(club_id,id,team_id,data) VALUES(?,?,?,?)",
-        ).run(clubId, p.id, p.teamId, JSON.stringify(p));
-      for (const m of data.matches)
-        db.prepare(
-          "INSERT INTO fixtures(club_id,id,team_id,data) VALUES(?,?,?,?)",
-        ).run(clubId, m.id, m.teamId, JSON.stringify(m));
-      for (const kind of ["lineups", "captainTasks", "reviews"] as const)
-        for (const [id, value] of Object.entries(data[kind]))
-          db.prepare("INSERT INTO fixture_documents VALUES(?,?,?,?)").run(
-            clubId,
-            id,
-            kind,
-            JSON.stringify(value),
-          );
-      for (const [id, value] of Object.entries(data.assessments))
-        db.prepare("INSERT INTO assessments VALUES(?,?,?)").run(
-          clubId,
-          id,
-          JSON.stringify(value),
-        );
-      db.prepare("UPDATE clubs SET revision=revision+1 WHERE id=?").run(clubId);
-      db.prepare(
+          ));
+      await db.insertRows("players", ["club_id", "id", "team_id", "data"],
+        data.players.map(p => [clubId, p.id, p.teamId, JSON.stringify(p)]));
+      await db.insertRows("fixtures", ["club_id", "id", "team_id", "data"],
+        data.matches.map(m => [clubId, m.id, m.teamId, JSON.stringify(m)]));
+      await db.insertRows("fixture_documents", ["club_id", "fixture_id", "kind", "data"],
+        (["lineups", "captainTasks", "reviews"] as const).flatMap(kind =>
+          Object.entries(data[kind]).map(([id, value]) => [clubId, id, kind, JSON.stringify(value)])));
+      await db.insertRows("assessments", ["club_id", "player_id", "data"],
+        Object.entries(data.assessments).map(([id, value]) => [clubId, id, JSON.stringify(value)]));
+      (await db.prepare("UPDATE clubs SET revision=revision+1 WHERE id=?").run(clubId));
+      (await db.prepare(
         "INSERT INTO audit_events(user_id,club_id,action) VALUES(?,?,?)",
-      ).run(userId, clubId, "save");
+      ).run(userId, clubId, "save"));
       return revision + 1;
     })
     .immediate();
