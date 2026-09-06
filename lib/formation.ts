@@ -3,7 +3,7 @@ import type { Formation, Lineup, Player, PlayerPosition } from "./types";
 export const MAX_STARTERS = 11;
 export const MAX_SUBS = 4;
 export const DEFAULT_LINES = [3, 4, 3];
-export const BUILTIN_PRESETS = [[4, 3, 3], [3, 4, 3], [3, 3, 4]];
+export const BUILTIN_PRESETS = [[4, 3, 3], [3, 4, 3], [3, 3, 4], [4, 4, 2], [4, 1, 4, 1]];
 export type FormationSlot = { id: string; label: string; role: PlayerPosition; x: number; y: number };
 
 export function validLines(lines: number[]) {

@@ -18,6 +18,12 @@ export default function FormationEditor({ match }: { match: Match }) {
   const [lines, setLines] = useState(lineup.formation?.lines ?? DEFAULT_LINES);
   const [name, setName] = useState(lineup.formation?.name ?? "");
   const [presets, setPresets] = useState(() => loadTeams().find(t => t.id === match.teamId)?.formationPresets ?? []);
+  const presetOptions = [...BUILTIN_PRESETS.map(lines => ({ lines, name: lines.join("-") })), ...presets];
+  const [presetSelection, setPresetSelection] = useState(() => {
+    const index = presetOptions.findIndex(p => p.name === lineup.formation?.name && p.lines.join() === lineup.formation.lines.join());
+    return index < 0 ? "" : String(index);
+  });
+  const custom = presetSelection === "";
   const [selected, setSelected] = useState<string | null>(null);
   const [swapFrom, setSwapFrom] = useState<string | null>(null);
   const [showAllPlayers, setShowAllPlayers] = useState(false);
@@ -65,6 +71,7 @@ export default function FormationEditor({ match }: { match: Match }) {
     persist(withFormation(lineup, { lines: nextLines, name: nextName, status: "draft", assignments }));
     setLines(nextLines); setName(nextName); setSelected(null); setSwapFrom(null); setShowAllPlayers(false);
     setMessage(remaining.length ? "Formation built. Some existing players are outside their recorded position; review their slots." : "Formation built. Select a position to start.");
+    return true;
   }
   function choose(slot: string) {
     if (!editable) return;
@@ -119,21 +126,24 @@ export default function FormationEditor({ match }: { match: Match }) {
     {editable && <details open={!formation} className="rounded-xl border border-[var(--border-primary)] p-3">
       <summary className="cursor-pointer font-semibold">Formation builder</summary>
       <div className="formation-config">
-        <label>Formation preset<select aria-label="Formation preset" className="formation-input" value="" onChange={e => {
-          const index = Number(e.target.value);
-          const preset = [...BUILTIN_PRESETS.map(lines => ({ lines, name: lines.join("-") })), ...presets][index];
-          if (preset) build(preset.lines, preset.name);
-        }}><option value="">Custom / choose preset</option>{[...BUILTIN_PRESETS.map(lines => ({ lines, name: lines.join("-") })), ...presets].map((p, i) => <option key={i} value={i}>{p.name}{i >= BUILTIN_PRESETS.length ? " (team)" : ""}</option>)}</select></label>
+        <label>Formation preset<select aria-label="Formation preset" className="formation-input" value={presetSelection} onChange={e => {
+          const value = e.target.value;
+          if (value === "") { setPresetSelection(""); return; }
+          const preset = presetOptions[Number(value)];
+          if (preset && build(preset.lines, preset.name)) setPresetSelection(value);
+        }}><option value="">Custom / choose preset</option>{presetOptions.map((p, i) => <option key={i} value={i}>{p.name}{i >= BUILTIN_PRESETS.length ? " (team)" : ""}</option>)}</select></label>
+        {custom && <>
         <label>Custom name<input maxLength={80} className="formation-input" value={name} onChange={e => setName(e.target.value)} /></label>
         <label>Outfield lines<input type="number" min={1} max={10} className="formation-input w-24" value={lines.length} onChange={e => {
           const count = Number(e.target.value);
           if (Number.isInteger(count) && count >= 1 && count <= 10) setLines(Array.from({ length: count }, (_, i) => lines[i] ?? 1));
         }} /></label>
         {lines.map((n, i) => <label key={i}>{lineLabel(i, lines.length)}<input aria-label={`Line ${i + 1} players`} type="number" min={1} max={10} className="formation-input w-20" value={n || ""} onChange={e => setLines(lines.map((v, j) => i === j ? Number(e.target.value) : v))} /></label>)}
+        </>}
       </div>
       <p className="my-3 text-sm">1 goalkeeper + {count - 1} outfield = {count} starting positions. Read presets from our goal: Defence → Midfield → Forward. Additional lines are midfield lines.</p>
       {count !== MAX_STARTERS && <p role="alert" className="my-2 text-sm">This formation contains {count} positions; standard hockey expects {MAX_STARTERS}. Publishing requires 11 filled positions.</p>}
-      <div className="flex flex-wrap gap-3"><button className="primary-button" onClick={() => build()}>Build formation</button><button className="rounded border px-3 py-2" onClick={savePreset}>Save team preset</button></div>
+      {custom && <div className="flex flex-wrap gap-3"><button className="primary-button" onClick={() => build()}>Build formation</button><button className="rounded border px-3 py-2" onClick={savePreset}>Save team preset</button></div>}
       {configChanged && <p className="mt-2 text-sm">Configuration not applied. Build formation to save these changes to the fixture.</p>}
     </details>}
     {!formation && lineup.placements.length > 0 && <><p>Existing free-position lineup. Build a formation to convert it, keeping selected players.</p><p>Substitutes: {lineup.subs.filter(Boolean).map(id => players.find(p => p.id === id)?.name).join(", ") || "None"}</p><Pitch players={players} placements={lineup.placements} isHome={match.isHome} onDrop={() => {}} onDragStart={e => e.preventDefault()} onRemove={() => {}} /></>}
