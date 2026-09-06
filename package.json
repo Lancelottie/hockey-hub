@@ -1,0 +1,43 @@
+{
+  "name": "cocaptain",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "setup": "node --import tsx scripts/setup.mts",
+    "user:add": "node --import tsx scripts/add-user.mts",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test",
+    "fixtures:sync": "node --import tsx scripts/sync-england-hockey.mts"
+  },
+  "dependencies": {
+    "better-auth": "^1.7.3",
+    "better-sqlite3": "^12.11.1",
+    "lucide-react": "^0.562.0",
+    "next": "^16.2.10",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "zod": "^4.5.4"
+  },
+  "overrides": {
+    "postcss": "^8.5.23"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@tailwindcss/postcss": "^4",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.1",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.13",
+    "typescript": "^5"
+  }
+}

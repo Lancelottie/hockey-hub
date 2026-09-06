@@ -1,0 +1,59 @@
+[
+  {
+    "seasonId": "1c16ec84-137f-4ecf-b3c6-8d2748abc595",
+    "competitionId": "4f1f531d-3d91-4f04-b9b1-5390b63ece01",
+    "competitionName": "North West Women's Division 6 West (North)",
+    "fixtures": [
+      {
+        "id": "1f7c4e6b-b2ad-45d5-b493-284178ef87db",
+        "sourceId": "4929033",
+        "sourceSystem": "Gms",
+        "seasonId": "1c16ec84-137f-4ecf-b3c6-8d2748abc595",
+        "competitionId": "4f1f531d-3d91-4f04-b9b1-5390b63ece01",
+        "competitionName": "North West Women's Division 6 West (North)",
+        "homeTeamId": "393ff35f-945d-451d-8e26-337b946d1b4d",
+        "awayTeamId": "4bf18a9b-fc7c-4881-a9c6-3bcbf5e8fd62",
+        "fixtureDate": "2026-09-19T15:15:00",
+        "fixtureTime": "15:15",
+        "status": "Active",
+        "statusDescription": "Active",
+        "isBye": false,
+        "homeTeam": {
+          "id": "393ff35f-945d-451d-8e26-337b946d1b4d",
+          "teamName": "Northern Development",
+          "entityUrlSlug": "northern-development-womens"
+        },
+        "awayTeam": {
+          "id": "4bf18a9b-fc7c-4881-a9c6-3bcbf5e8fd62",
+          "teamName": "Neston Development",
+          "entityUrlSlug": "neston-development-womens"
+        }
+      },
+      {
+        "id": "b90fdabc-d239-43e4-93d1-d1c0b69b1d88",
+        "sourceId": "4931348",
+        "sourceSystem": "Gms",
+        "seasonId": "1c16ec84-137f-4ecf-b3c6-8d2748abc595",
+        "competitionId": "4f1f531d-3d91-4f04-b9b1-5390b63ece01",
+        "competitionName": "North West Women's Division 6 West (North)",
+        "homeTeamId": "84296199-fdcf-476f-8ee2-36023a395ea9",
+        "awayTeamId": "393ff35f-945d-451d-8e26-337b946d1b4d",
+        "fixtureDate": "2026-09-26T00:00:00",
+        "fixtureTime": "00:00",
+        "status": "Active",
+        "statusDescription": "Active",
+        "isBye": false,
+        "homeTeam": {
+          "id": "84296199-fdcf-476f-8ee2-36023a395ea9",
+          "teamName": "West Derby Development",
+          "entityUrlSlug": "west-derby-development-womens"
+        },
+        "awayTeam": {
+          "id": "393ff35f-945d-451d-8e26-337b946d1b4d",
+          "teamName": "Northern Development",
+          "entityUrlSlug": "northern-development-womens"
+        }
+      }
+    ]
+  }
+]

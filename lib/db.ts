@@ -1,0 +1,71 @@
+import Database from "better-sqlite3";
+import { migrateEnglandHockey } from "./england-hockey/migration";
+import { mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+
+let connection: Database.Database | undefined;
+export function getDb() {
+  if (!connection) {
+    const path = resolve(
+      /* turbopackIgnore: true */ process.env.DATABASE_PATH ??
+        "data/hockey-hub.sqlite",
+    );
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    connection = new Database(path);
+    connection.pragma("journal_mode = WAL");
+    connection.pragma("foreign_keys = ON");
+    connection.pragma("busy_timeout = 5000");
+  }
+  return connection;
+}
+
+export function migrateApp() {
+  getDb().exec(`
+    CREATE TABLE IF NOT EXISTS app_accounts (
+      user_id TEXT PRIMARY KEY REFERENCES user(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended')),
+      last_login TEXT
+    );
+    CREATE TABLE IF NOT EXISTS clubs (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS club_memberships (
+      user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+      club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK(role IN ('administrator','club_admin','manager','coach','player','read_only')),
+      PRIMARY KEY(user_id, club_id)
+    );
+    CREATE TABLE IF NOT EXISTS teams (
+      club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+      id TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY(club_id,id)
+    );
+    CREATE TABLE IF NOT EXISTS team_formation_presets (
+      club_id TEXT NOT NULL, team_id TEXT NOT NULL, data TEXT NOT NULL,
+      PRIMARY KEY(club_id,team_id),
+      FOREIGN KEY(club_id,team_id) REFERENCES teams(club_id,id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS players (
+      club_id TEXT NOT NULL, id TEXT NOT NULL, team_id TEXT NOT NULL, data TEXT NOT NULL,
+      PRIMARY KEY(club_id,id), FOREIGN KEY(club_id,team_id) REFERENCES teams(club_id,id)
+    );
+    CREATE TABLE IF NOT EXISTS fixtures (
+      club_id TEXT NOT NULL, id TEXT NOT NULL, team_id TEXT NOT NULL, data TEXT NOT NULL,
+      PRIMARY KEY(club_id,id), FOREIGN KEY(club_id,team_id) REFERENCES teams(club_id,id)
+    );
+    CREATE TABLE IF NOT EXISTS fixture_documents (
+      club_id TEXT NOT NULL, fixture_id TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL,
+      PRIMARY KEY(club_id,fixture_id,kind),
+      FOREIGN KEY(club_id,fixture_id) REFERENCES fixtures(club_id,id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS assessments (
+      club_id TEXT NOT NULL, player_id TEXT NOT NULL, data TEXT NOT NULL,
+      PRIMARY KEY(club_id,player_id), FOREIGN KEY(club_id,player_id) REFERENCES players(club_id,id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS audit_events (
+      id INTEGER PRIMARY KEY, user_id TEXT NOT NULL, club_id TEXT NOT NULL,
+      action TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  migrateEnglandHockey(getDb());
+}
