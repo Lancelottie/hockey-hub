@@ -915,3 +915,17 @@ select {
   background: #182745dd;
 }
 .bench-slot { padding: 8px; background: var(--surface-muted); }
+
+.position-player-picker {
+  position: fixed;
+  z-index: 100;
+  width: min(320px, calc(100vw - 16px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 24%);
+}

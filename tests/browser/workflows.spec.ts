@@ -285,6 +285,21 @@ test("formation keyboard workflow, swap, bench, presets and responsive custom sl
       expect(rect.x + rect.width).toBeLessThanOrEqual(pitch!.x + pitch!.width);
       expect(rect.y + rect.height).toBeLessThanOrEqual(pitch!.y + pitch!.height);
     }
+    const goalkeeper = page.locator('[data-slot="gk"]');
+    await goalkeeper.click();
+    const picker = page.getByRole("dialog", { name: "Choose player for position" });
+    await expect(picker).toBeVisible();
+    const pickerBox = (await picker.boundingBox())!;
+    const shirtBox = (await goalkeeper.boundingBox())!;
+    expect(pickerBox.x).toBeGreaterThanOrEqual(0);
+    expect(pickerBox.x + pickerBox.width).toBeLessThanOrEqual(width);
+    expect(pickerBox.y).toBeGreaterThanOrEqual(0);
+    expect(pickerBox.y + pickerBox.height).toBeLessThanOrEqual(900);
+    expect(Math.min(Math.abs(pickerBox.y - shirtBox.y - shirtBox.height), Math.abs(shirtBox.y - pickerBox.y - pickerBox.height))).toBeLessThanOrEqual(9);
+    await page.screenshot({ path: `test-results/position-picker-${width}.png`, fullPage: false });
+    await page.keyboard.press("Escape");
+    await expect(picker).not.toBeVisible();
+    await expect(goalkeeper).toBeFocused();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await page.getByText("Formation builder", { exact: true }).click();
