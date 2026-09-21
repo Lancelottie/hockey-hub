@@ -67,8 +67,8 @@ const result = await auth.api.signUpEmail({
   ).run(result.user.id, club.id, role));
   if (scopedTeam) {
     if (scopedTeam[0].club_id !== club.id) throw new Error("Club and team do not match.");
-    await db.prepare("INSERT INTO membership_team_access(user_id,club_id,team_ids) VALUES(?,?,?)")
-      .run(result.user.id, club.id, JSON.stringify([scopedTeam[0].id]));
+    await db.prepare("INSERT INTO membership_team_access(user_id,club_id,role,team_ids) VALUES(?,?,?,?)")
+      .run(result.user.id, club.id, role, JSON.stringify([scopedTeam[0].id]));
   }
 })());
 console.log(

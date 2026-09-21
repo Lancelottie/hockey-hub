@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { getStore, lockClub } from "../database";
-import { AccessError, requireTeamAccess } from "../repository";
+import { AccessError, requireNorthernAdmin } from "../repository";
 import type { Match } from "../types";
 import {
   EnglandHockeyError,
@@ -44,7 +44,7 @@ export async function readFixtureSource(
   clubId: string,
   teamId: string,
 ) {
-  (await requireTeamAccess(userId, clubId, teamId, true));
+  (await requireNorthernAdmin(userId, clubId));
   (await requireTeam(clubId, teamId));
   return (await getFixtureSource(clubId, teamId));
 }
@@ -63,7 +63,7 @@ export async function syncEnglandHockeyFixtures(
 ) {
   const { clubId, actor } = options;
   const authorize = async () => {
-    if ("userId" in actor) (await requireTeamAccess(actor.userId, clubId, teamId, true));
+    if ("userId" in actor) (await requireNorthernAdmin(actor.userId, clubId));
     (await requireTeam(clubId, teamId));
   };
   (await authorize());

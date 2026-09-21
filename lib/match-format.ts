@@ -66,6 +66,14 @@ export function getFixtureMonthKey(value: string): string {
   return `${parts.year}-${String(parts.month).padStart(2, "0")}`;
 }
 
+export function isUpcomingFixture(value: string, now: Date = new Date()): boolean {
+  const parts = parseMatchDateParts(value);
+  if (!parts) return false;
+  const matchDay = new Date(parts.year, parts.month - 1, parts.day).setHours(0, 0, 0, 0);
+  const today = new Date(now).setHours(0, 0, 0, 0);
+  return matchDay >= today;
+}
+
 export function formatFixtureMonthLabel(monthKey: string): string {
   if (monthKey === "no-date") return "No date";
   const [year, month] = monthKey.split("-").map(Number);

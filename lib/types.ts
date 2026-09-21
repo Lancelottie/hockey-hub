@@ -58,18 +58,24 @@ export type Lineup = {
   subs: (string | null)[];
 };
 
+export type CaptainTask = {
+  done: boolean;
+  answer: string;
+};
+
 export type CaptainTaskChecklist = {
-  pushback: string;
-  warmupStart: string;
-  northernKit: string;
-  oppositionKit: string;
-  teas: string;
-  lifts: string;
-  notable: string;
-  keepersKit: string;
-  firstAidKit: string;
-  awayBalls: string;
-  umpires: string;
+  pushback: CaptainTask;
+  warmupStart: CaptainTask;
+  northernKit: CaptainTask;
+  oppositionKit: CaptainTask;
+  teas: CaptainTask;
+  lifts: CaptainTask;
+  notable: CaptainTask;
+  keepersKit: CaptainTask;
+  firstAidKit: CaptainTask;
+  awayBalls: CaptainTask;
+  umpires: CaptainTask;
+  gmsUpdated: CaptainTask;
 };
 
 export type PostMatchReview = {

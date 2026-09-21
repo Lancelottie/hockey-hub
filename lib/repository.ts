@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 import { withFormation } from "./formation";
+import { normalizeCaptainTasks } from "./captain-tasks";
 import { getStore, lockClub } from "./database";
-import { canAdmin, canManage, roleTeamName, type Role } from "./users";
+import { canAdmin, canManage, defaultActiveRole, isNorthernHockeyAdmin, roleTeamName, type Role } from "./users";
 import { emptySnapshot, snapshotSchema, type Snapshot } from "./validation";
 export class AccessError extends Error {
   constructor(
@@ -12,24 +13,45 @@ export class AccessError extends Error {
     super(message);
   }
 }
-export type ClubAccess = { id: string; name: string; role: Role; teamIds: string[] | null };
+export type ClubAccess = { id: string; name: string; role: Role; teamIds: string[] | null; availableRoles: Role[] };
+/**
+ * A member may hold several roles for the same club (e.g. club_admin and a team captaincy).
+ * Exactly one is "active" at a time (see active_roles / switchActiveRole), and every
+ * authorization check in this file keys off that single active role — the member's other,
+ * unselected roles grant nothing until they explicitly switch to one of them.
+ */
 export async function listClubs(userId: string): Promise<ClubAccess[]> {
   const rows = (await getStore()
     .prepare(
-      `SELECT c.id,c.name,m.role,s.team_ids FROM clubs c JOIN club_memberships m ON m.club_id=c.id JOIN app_accounts a ON a.user_id=m.user_id LEFT JOIN membership_team_access s ON s.user_id=m.user_id AND s.club_id=m.club_id WHERE m.user_id=? AND a.status='active' ORDER BY c.name`,
+      `SELECT c.id,c.name,m.role,s.team_ids FROM clubs c JOIN club_memberships m ON m.club_id=c.id JOIN app_accounts a ON a.user_id=m.user_id LEFT JOIN membership_team_access s ON s.user_id=m.user_id AND s.club_id=m.club_id AND s.role=m.role WHERE m.user_id=? AND a.status='active' ORDER BY c.name,m.role`,
     )
     .all(userId)) as { id: string; name: string; role: Role; team_ids: string | null }[];
-  return Promise.all(rows.map(async ({ team_ids, ...club }) => {
+  const activeRows = (await getStore()
+    .prepare("SELECT club_id,role FROM active_roles WHERE user_id=?")
+    .all(userId)) as { club_id: string; role: Role }[];
+  const activeByClub = new Map(activeRows.map((r) => [r.club_id, r.role]));
+
+  const byClub = new Map<string, { id: string; name: string; roles: { role: Role; team_ids: string | null }[] }>();
+  for (const { id, name, role, team_ids } of rows) {
+    const entry = byClub.get(id) ?? { id, name, roles: [] };
+    entry.roles.push({ role, team_ids });
+    byClub.set(id, entry);
+  }
+  return Promise.all(Array.from(byClub.values()).map(async ({ id, name, roles }) => {
+    const availableRoles = roles.map((r) => r.role);
+    const requested = activeByClub.get(id);
+    const role = requested && availableRoles.includes(requested) ? requested : defaultActiveRole(availableRoles);
+    const { team_ids } = roles.find((r) => r.role === role)!;
     let teamIds = team_ids === null ? null : z.array(z.string()).parse(JSON.parse(team_ids));
-    const teamName = roleTeamName(club.role);
+    const teamName = roleTeamName(role);
     if (teamName) {
       const teams = await getStore().prepare("SELECT id FROM teams WHERE club_id=? AND name=?")
-        .all(club.id, teamName) as { id: string }[];
+        .all(id, teamName) as { id: string }[];
       // Named roles never become club-wide, even if a scope row is absent or misconfigured.
       // A missing, renamed or ambiguous team grants no access until corrected.
       teamIds = teams.length === 1 && (teamIds === null || teamIds.includes(teams[0].id)) ? [teams[0].id] : [];
     }
-    return { ...club, teamIds };
+    return { id, name, role, teamIds, availableRoles };
   }));
 }
 export async function requireClub(userId: string, clubId: string, write = false) {
@@ -41,6 +63,22 @@ export async function requireClub(userId: string, clubId: string, write = false)
 export async function requireTeamAccess(userId: string, clubId: string, teamId: string, write = false) {
   const club = await requireClub(userId, clubId, write);
   if (club.teamIds !== null && !club.teamIds.includes(teamId))
+    throw new AccessError(403, "You do not have permission for this team.");
+  return club;
+}
+/** Restricted to the Northern Hockey Admin role, regardless of canManage/canAdmin. */
+export async function requireNorthernAdmin(userId: string, clubId: string) {
+  const club = (await listClubs(userId)).find((c) => c.id === clubId);
+  if (!club || !isNorthernHockeyAdmin(club.role))
+    throw new AccessError(403, "This feature is restricted to Northern Hockey Admins.");
+  return club;
+}
+/** A team's own manager/coach/captain, or a club-wide Northern Hockey Admin acting across teams. */
+export async function requireTeamManageAccess(userId: string, clubId: string, teamId: string) {
+  const club = (await listClubs(userId)).find((c) => c.id === clubId);
+  if (!club) throw new AccessError(403, "You do not have permission for this club.");
+  if (isNorthernHockeyAdmin(club.role)) return club;
+  if (!canManage(club.role) || (club.teamIds !== null && !club.teamIds.includes(teamId)))
     throw new AccessError(403, "You do not have permission for this team.");
   return club;
 }
@@ -105,6 +143,9 @@ async function readClubData(club: ClubAccess) {
   // Coordinates are derived, including line orientation updates in existing documents.
   for (const [id, lineup] of Object.entries(data.lineups))
     if (lineup.formation) data.lineups[id] = withFormation(lineup, lineup.formation);
+  // Normalizes the pre-checklist flat-string shape still present in older saved documents.
+  for (const [id, tasks] of Object.entries(data.captainTasks))
+    data.captainTasks[id] = normalizeCaptainTasks(tasks);
   if (canManage(club.role))
     for (const row of (await db
       .prepare("SELECT player_id,data FROM assessments WHERE club_id=?")

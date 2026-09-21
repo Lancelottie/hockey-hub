@@ -1,21 +1,53 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useTeam } from "@/lib/team-context";
-import { canAdmin, canManage, ROLES, roleLabel, roleTeamName } from "@/lib/users";
+import { canAdmin, canManage, isNorthernHockeyAdmin, ROLES, roleLabel, roleTeamName, type Role } from "@/lib/users";
 import {
   getSnapshot,
   hasUnsavedChanges,
+  loadCaptainTasks,
+  loadMatches,
   replaceSnapshot,
   saveTeams,
   exportDraft,
 } from "@/lib/storage";
+import { CAPTAIN_TASK_KEYS, isCaptainTaskApplicable } from "@/lib/captain-tasks";
+import { formatFixtureLabel, formatMatchDateLong, isUpcomingFixture } from "@/lib/match-format";
 import { readLegacy } from "@/lib/legacy-import";
 import { snapshotSchema, type Snapshot } from "@/lib/validation";
+type Member = { userId: string; name: string; email: string; roles: Role[] };
 export default function AdminPage() {
-  const { club, teams } = useTeam();
+  const { club, teams, userId } = useTeam();
   const [name, setName] = useState("");
   const [preview, setPreview] = useState<Snapshot | null>(null);
   const [message, setMessage] = useState("");
+  const [members, setMembers] = useState<Member[]>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [membersError, setMembersError] = useState("");
+  const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!canAdmin(club.role)) return;
+    const controller = new AbortController();
+    fetch(`/api/admin/members?clubId=${encodeURIComponent(club.id)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        if (controller.signal.aborted) return;
+        setMembers(result.members);
+      })
+      .catch((e) => {
+        if (!controller.signal.aborted)
+          setMembersError(e instanceof Error ? e.message : "Unable to load members.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setMembersLoading(false);
+      });
+    return () => controller.abort();
+  }, [club.id, club.role]);
   if (!canAdmin(club.role))
     return (
       <div className="panel">
@@ -23,6 +55,40 @@ export default function AdminPage() {
         <p>Only club administrators can manage teams and import data.</p>
       </div>
     );
+  const teamNameById = Object.fromEntries(teams.map((t) => [t.id, t.name]));
+  // Only each team's next scheduled fixture is checked, not every fixture further out.
+  const nextMatchByTeam = new Map<string, ReturnType<typeof loadMatches>[number]>();
+  for (const match of loadMatches()
+    .filter((match) => isUpcomingFixture(match.date))
+    .sort((a, b) => a.date.localeCompare(b.date)))
+    if (!nextMatchByTeam.has(match.teamId)) nextMatchByTeam.set(match.teamId, match);
+  const outstandingByFixture = Array.from(nextMatchByTeam.values())
+    .map((match) => ({
+      match,
+      outstanding: CAPTAIN_TASK_KEYS.filter(
+        (key) => isCaptainTaskApplicable(key, match.isHome) && !loadCaptainTasks(match.id)[key].done,
+      ),
+    }))
+    .filter((entry) => entry.outstanding.length > 0)
+    .sort((a, b) => a.match.date.localeCompare(b.match.date));
+  async function toggleRole(targetUserId: string, role: Role, add: boolean) {
+    setSavingUserId(targetUserId);
+    setMembersError("");
+    try {
+      const response = await fetch("/api/admin/members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clubId: club.id, userId: targetUserId, role, action: add ? "add" : "remove" }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Unable to update role.");
+      setMembers(result.members);
+    } catch (e) {
+      setMembersError(e instanceof Error ? e.message : "Unable to update role.");
+    } finally {
+      setSavingUserId(null);
+    }
+  }
   function addTeam(event: React.FormEvent) {
     event.preventDefault();
     const trimmed = name.trim();
@@ -88,6 +154,43 @@ export default function AdminPage() {
           Export workspace
         </button>
       </div>
+      {outstandingByFixture.length > 0 && (
+        <section className="rounded-[20px] border border-[var(--status-warning)] bg-[var(--status-warning-light)] p-5">
+          <h2 className="text-lg font-bold text-[var(--status-warning)]">
+            Outstanding captain tasks
+          </h2>
+          <p className="mt-1 text-sm text-[var(--status-warning)]">
+            These upcoming fixtures still have captain tasks that haven&apos;t been marked done.
+          </p>
+          <ul className="mt-4 space-y-3">
+            {outstandingByFixture.map(({ match, outstanding }) => (
+              <li
+                key={match.id}
+                className="rounded-lg bg-[var(--surface-primary)] p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-[var(--text-primary)]">
+                    {teamNameById[match.teamId] ?? "Unknown team"} ·{" "}
+                    {formatFixtureLabel(teamNameById[match.teamId] ?? "Team", match)}
+                  </p>
+                  <Link
+                    href={`/fixtures/${match.id}?tab=captain-tasks&highlight=outstanding`}
+                    className="text-sm underline"
+                  >
+                    Open captain tasks →
+                  </Link>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {formatMatchDateLong(match.date)}
+                </p>
+                <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                  {outstanding.length} outstanding {outstanding.length === 1 ? "task" : "tasks"}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="panel">
           <h2 className="mb-4 text-xl font-bold">Your teams</h2>
@@ -186,16 +289,69 @@ export default function AdminPage() {
       <section className="panel">
         <h2 className="mb-3 text-xl font-bold">People & access</h2>
         <p className="text-sm text-[var(--text-secondary)]">
-          Account creation and club membership changes are managed by the
-          deployment operator. Contact them to add or suspend a member. Your
-          current role is {roleLabel(club.role)}.
+          Account creation is managed by the deployment operator; contact them
+          to add or suspend a member. Your current role is {roleLabel(club.role)}.
         </p>
+        <h3 className="mt-5 mb-3 font-semibold">Manage roles</h3>
+        <p className="mb-3 text-sm text-[var(--text-secondary)]">
+          A member may hold more than one role (e.g. a club admin who is also a team
+          captain) and switch which is active from the topbar. You can grant yourself
+          an additional role here, but not remove your own, and a member must always
+          keep at least one role.
+        </p>
+        {membersLoading ? (
+          <p className="text-sm text-[var(--text-secondary)]">Loading members…</p>
+        ) : (
+          <ul className="space-y-3">
+            {members.map((member) => (
+              <li
+                key={member.userId}
+                className="rounded-lg bg-[var(--surface-muted)] p-3"
+              >
+                <p className="font-semibold">
+                  {member.name}
+                  {member.userId === userId && (
+                    <span className="text-[var(--text-secondary)]"> (you)</span>
+                  )}
+                </p>
+                <p className="text-sm text-[var(--text-secondary)]">{member.email}</p>
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+                  {ROLES.map((role) => {
+                    const held = member.roles.includes(role);
+                    const isSelf = member.userId === userId;
+                    const disabled =
+                      savingUserId === member.userId ||
+                      (held && (isSelf || member.roles.length === 1));
+                    return (
+                      <label key={role} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={held}
+                          disabled={disabled}
+                          onChange={() => void toggleRole(member.userId, role, !held)}
+                          className="h-4 w-4 accent-[var(--accent-primary)]"
+                        />
+                        {roleLabel(role)}
+                      </label>
+                    );
+                  })}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {membersError && (
+          <p role="alert" className="mt-3 text-sm text-[var(--status-critical)]">
+            {membersError}
+          </p>
+        )}
         <h3 className="mt-5 mb-3 font-semibold">Available roles</h3>
         <ul className="grid gap-3 sm:grid-cols-2">
           {ROLES.map(role => <li key={role} className="rounded-lg border border-[var(--border-primary)] p-3">
             <p className="font-semibold">{roleLabel(role)}</p>
             <p className="text-sm text-[var(--text-secondary)]">{roleTeamName(role)
               ? `Edit players, fixtures, selections and notes for ${roleTeamName(role)} only.`
+              : isNorthernHockeyAdmin(role) ? "View all teams; manage England Hockey submissions, registration status and cross-team squad pooling."
               : canAdmin(role) ? "Manage club teams, data and selections."
               : canManage(role) ? "Edit players, fixtures, selections and notes within assigned access."
               : "View team data and published selections within assigned access."}</p>

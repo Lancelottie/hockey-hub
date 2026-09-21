@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { generateSlots, validLines, withFormation } from "./formation";
+import { sameSection } from "./team-sections";
 const id = z
   .string()
   .min(1)
@@ -77,19 +78,21 @@ const lineup = z
     subs: z.array(id.nullable()).max(4),
   })
   .strict();
+const captainTask = z.object({ done: z.boolean(), answer: text }).strict();
 const tasks = z
   .object({
-    pushback: text,
-    warmupStart: text,
-    northernKit: text,
-    oppositionKit: text,
-    teas: text,
-    lifts: text,
-    notable: text,
-    keepersKit: text,
-    firstAidKit: text,
-    awayBalls: text,
-    umpires: text,
+    pushback: captainTask,
+    warmupStart: captainTask,
+    northernKit: captainTask,
+    oppositionKit: captainTask,
+    teas: captainTask,
+    lifts: captainTask,
+    notable: captainTask,
+    keepersKit: captainTask,
+    firstAidKit: captainTask,
+    awayBalls: captainTask,
+    umpires: captainTask,
+    gmsUpdated: captainTask,
   })
   .strict();
 const review = z
@@ -162,12 +165,12 @@ export const snapshotSchema = z
       ];
       if (new Set(ids).size !== ids.length)
         fail("Player selected more than once");
-      for (const pid of ids)
-        if (
-          !players.has(pid) ||
-          players.get(pid)?.teamId !== matches.get(key)?.teamId
-        )
+      for (const pid of ids) {
+        const player = players.get(pid);
+        const matchTeamId = matches.get(key)?.teamId;
+        if (!player || !matchTeamId || !sameSection(data.teams, player.teamId, matchTeamId))
           fail("Selected player belongs to another team");
+      }
     }
     for (const [key, value] of Object.entries(data.reviews)) {
       for (const pid of [
@@ -176,10 +179,9 @@ export const snapshotSchema = z
           ? [value.womanOfTheMatchPlayerId]
           : []),
       ]) {
-        if (
-          !players.has(pid) ||
-          players.get(pid)?.teamId !== matches.get(key)?.teamId
-        )
+        const player = players.get(pid);
+        const matchTeamId = matches.get(key)?.teamId;
+        if (!player || !matchTeamId || !sameSection(data.teams, player.teamId, matchTeamId))
           fail("Reviewed player belongs to another team");
       }
     }

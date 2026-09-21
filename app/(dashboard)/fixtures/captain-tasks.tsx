@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   ClipboardCheck,
+  Database,
   Flag,
   MessageSquare,
   ShieldCheck,
@@ -14,22 +15,9 @@ import {
   CircleDot,
 } from "lucide-react";
 import { formatFixtureLabel, formatMatchDateLong } from "@/lib/match-format";
+import { emptyCaptainTaskChecklist, isCaptainTaskApplicable } from "@/lib/captain-tasks";
 import { loadCaptainTasks, saveCaptainTasks } from "@/lib/storage";
 import type { CaptainTaskChecklist, Match } from "@/lib/types";
-
-const EMPTY_TASKS: CaptainTaskChecklist = {
-  pushback: "",
-  warmupStart: "",
-  northernKit: "",
-  oppositionKit: "",
-  teas: "",
-  lifts: "",
-  notable: "",
-  keepersKit: "",
-  firstAidKit: "",
-  awayBalls: "",
-  umpires: "",
-};
 
 const TASKS = [
   {
@@ -112,6 +100,14 @@ const TASKS = [
     placeholder: "Home umpires confirmed",
     icon: ClipboardCheck,
   },
+  {
+    key: "gmsUpdated",
+    title: "Update GMS",
+    description:
+      "Update the Game Management System with every player who played, including subs and any borrowed players.",
+    placeholder: "GMS updated with full team sheet",
+    icon: Database,
+  },
 ] as const satisfies ReadonlyArray<{
   key: keyof CaptainTaskChecklist;
   title: string;
@@ -124,26 +120,44 @@ const TASKS = [
 export default function CaptainTasks({
   match,
   teamName,
+  highlightOutstanding = false,
 }: {
   match: Match | null;
   teamName: string;
+  highlightOutstanding?: boolean;
 }) {
-  const [tasks, setTasks] = useState<CaptainTaskChecklist>(EMPTY_TASKS);
+  const [tasks, setTasks] = useState<CaptainTaskChecklist>(emptyCaptainTaskChecklist);
+  const [draftAnswers, setDraftAnswers] = useState<Partial<Record<keyof CaptainTaskChecklist, string>>>({});
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    setDraftAnswers({});
     if (!match) {
-      setTasks(EMPTY_TASKS);
+      setTasks(emptyCaptainTaskChecklist());
       return;
     }
     setTasks(loadCaptainTasks(match.id));
   }, [match]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  function handleChange(key: keyof CaptainTaskChecklist, value: string) {
-    const next = { ...tasks, [key]: value };
+  function toggleDone(key: keyof CaptainTaskChecklist) {
+    if (!match) return;
+    const next = { ...tasks, [key]: { ...tasks[key], done: !tasks[key].done } };
     setTasks(next);
-    if (match) saveCaptainTasks(match.id, next);
+    saveCaptainTasks(match.id, next);
+  }
+
+  function submitAnswer(key: keyof CaptainTaskChecklist) {
+    if (!match) return;
+    const answer = draftAnswers[key] ?? tasks[key].answer;
+    const next = { ...tasks, [key]: { ...tasks[key], answer } };
+    setTasks(next);
+    saveCaptainTasks(match.id, next);
+    setDraftAnswers((prev) => {
+      const rest = { ...prev };
+      delete rest[key];
+      return rest;
+    });
   }
 
   return (
@@ -181,8 +195,8 @@ export default function CaptainTasks({
               </p>
               <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">
                 {match
-                  ? "Captain task notes save automatically to this fixture."
-                  : "Pick a fixture first to start saving notes."}
+                  ? "Tick each task off as it's done, and submit an answer to save its details."
+                  : "Pick a fixture first to start."}
               </p>
             </div>
           </div>
@@ -198,54 +212,110 @@ export default function CaptainTasks({
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {TASKS.map((task) => {
               const Icon = task.icon;
-              const isDisabled =
-                !match ||
-                (task.key === "awayBalls" && match.isHome) ||
-                (task.key === "umpires" && !match.isHome);
-              const value =
-                task.key === "awayBalls" && match?.isHome
+              const notApplicable = !!match && !isCaptainTaskApplicable(task.key, match.isHome);
+              const forcedMessage = notApplicable
+                ? task.key === "awayBalls"
                   ? "Not needed for home fixtures"
-                  : task.key === "umpires" && match && !match.isHome
-                    ? "Only needed for home fixtures"
-                    : tasks[task.key];
+                  : "Only needed for home fixtures"
+                : null;
+              const isDisabled = !match || notApplicable;
+              const saved = tasks[task.key];
+              const draft = draftAnswers[task.key] ?? saved.answer;
+              const isDirty = draftAnswers[task.key] !== undefined && draftAnswers[task.key] !== saved.answer;
+              const hasAnswer = saved.answer.trim() !== "";
+              const outstanding = highlightOutstanding && !isDisabled && !saved.done;
 
               return (
                 <div
                   key={task.key}
-                  className="rounded-[14px] border border-[var(--border-primary)] bg-[var(--surface-muted)] p-4"
+                  className={`rounded-[14px] border p-4 ${
+                    outstanding
+                      ? "border-[var(--status-warning)] bg-[var(--status-warning-light)]"
+                      : "border-[var(--border-primary)] bg-[var(--surface-muted)]"
+                  }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-primary-light)] text-[var(--accent-primary)]">
-                      <Icon size={18} />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                          outstanding
+                            ? "bg-[var(--status-warning)]/15 text-[var(--status-warning)]"
+                            : "bg-[var(--accent-primary-light)] text-[var(--accent-primary)]"
+                        }`}
+                      >
+                        <Icon size={18} />
+                      </div>
+                      <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                        {task.title}
+                      </h3>
+                      {outstanding && (
+                        <span className="rounded-full bg-[var(--status-warning)] px-2 py-0.5 text-xs font-semibold text-white">
+                          Outstanding
+                        </span>
+                      )}
                     </div>
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                      {task.title}
-                    </h3>
+                    <label className="flex shrink-0 items-center gap-2 text-xs font-medium text-[var(--text-secondary)]">
+                      <input
+                        type="checkbox"
+                        checked={saved.done}
+                        onChange={() => toggleDone(task.key)}
+                        disabled={isDisabled}
+                        className="h-4 w-4 accent-[var(--accent-primary)]"
+                      />
+                      Done
+                    </label>
                   </div>
                   <p className="mt-3 text-sm text-[var(--text-secondary)]">
                     {task.description}
                   </p>
-                  {"multiline" in task && task.multiline ? (
-                    <textarea
-                      value={value}
-                      onChange={(event) =>
-                        handleChange(task.key, event.target.value)
-                      }
-                      placeholder={task.placeholder}
-                      disabled={isDisabled}
-                      rows={4}
-                      className="mt-4 w-full resize-none rounded-xl border border-[var(--border-primary)] bg-[var(--surface-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-60"
-                    />
+                  {forcedMessage ? (
+                    <p className="mt-4 text-sm text-[var(--text-muted)]">{forcedMessage}</p>
                   ) : (
-                    <input
-                      value={value}
-                      onChange={(event) =>
-                        handleChange(task.key, event.target.value)
-                      }
-                      placeholder={task.placeholder}
-                      disabled={isDisabled}
-                      className="mt-4 w-full rounded-xl border border-[var(--border-primary)] bg-[var(--surface-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-60"
-                    />
+                    <>
+                      {"multiline" in task && task.multiline ? (
+                        <textarea
+                          value={draft}
+                          onChange={(event) =>
+                            setDraftAnswers((prev) => ({ ...prev, [task.key]: event.target.value }))
+                          }
+                          placeholder={task.placeholder}
+                          disabled={isDisabled}
+                          rows={4}
+                          className="mt-4 w-full resize-none rounded-xl border border-[var(--border-primary)] bg-[var(--surface-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                      ) : (
+                        <input
+                          value={draft}
+                          onChange={(event) =>
+                            setDraftAnswers((prev) => ({ ...prev, [task.key]: event.target.value }))
+                          }
+                          placeholder={task.placeholder}
+                          disabled={isDisabled}
+                          className="mt-4 w-full rounded-xl border border-[var(--border-primary)] bg-[var(--surface-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                      )}
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={() => submitAnswer(task.key)}
+                          disabled={isDisabled || !isDirty}
+                          className="rounded-lg bg-[var(--accent-primary)] px-3 py-1.5 text-xs font-medium text-[var(--text-on-dark)] transition-colors hover:bg-[var(--accent-primary-hover)] disabled:opacity-50"
+                        >
+                          Submit answer
+                        </button>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                            isDirty
+                              ? "bg-[var(--accent-primary-light)] text-[var(--accent-primary)]"
+                              : hasAnswer
+                                ? "bg-[var(--status-good-light)] text-[var(--status-good)]"
+                                : "bg-[var(--surface-primary)] text-[var(--text-secondary)]"
+                          }`}
+                        >
+                          {isDirty ? "Unsaved answer" : hasAnswer ? "Submitted" : "No answer yet"}
+                        </span>
+                      </div>
+                    </>
                   )}
                 </div>
               );

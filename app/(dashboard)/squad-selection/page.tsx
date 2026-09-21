@@ -7,6 +7,7 @@ import {
   loadPlayers,
   savePlayerAssessments,
 } from "@/lib/storage";
+import { sectionKey } from "@/lib/team-sections";
 import type { Player, PlayerAssessment, SquadTier } from "@/lib/types";
 
 type AssessmentMetricKey = Exclude<
@@ -85,12 +86,6 @@ function recommendedTeam(score: number): "1s" | "2s" | "Development" {
   if (score >= 32) return "1s";
   if (score >= 20) return "2s";
   return "Development";
-}
-
-function sectionKey(teamName: string): "ladies" | "mens" | null {
-  if (/^ladies/i.test(teamName)) return "ladies";
-  if (/^mens/i.test(teamName)) return "mens";
-  return null;
 }
 
 function sectionLabel(teamName: string): string {

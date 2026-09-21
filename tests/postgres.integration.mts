@@ -43,7 +43,7 @@ test("PostgreSQL transfer, imported login, persistence, concurrency, permissions
   data.matches = [{ id: "fixture", teamId: "team", opponent: "Visitors", date: "", isHome: true }];
   data.lineups.fixture = assignPlayer(withFormation({ placements: [], subs: [null, null, null, null] }, { name: "", lines: [3, 4, 3], status: "draft", assignments: {} }), "line-2-0", "player");
   await writeClub(user.user.id, "club", 0, data);
-  source.prepare("INSERT INTO membership_team_access VALUES(?,?,?)").run(user.user.id, "club", '["team"]');
+  source.prepare("INSERT INTO membership_team_access(user_id,club_id,role,team_ids) VALUES(?,?,?,?)").run(user.user.id, "club", "club_admin", '["team"]');
   try {
     await admin.query(`CREATE SCHEMA "${schema}"`);
     const scoped = new URL(targetUrl);
@@ -54,8 +54,34 @@ test("PostgreSQL transfer, imported login, persistence, concurrency, permissions
     await getPool().query(postgresSchema);
     // Exercise upgrading the old production CHECK constraint as well as a fresh schema.
     await getPool().query("ALTER TABLE club_memberships DROP CONSTRAINT club_memberships_role_check; ALTER TABLE club_memberships ADD CONSTRAINT club_memberships_role_check CHECK(role IN ('administrator','club_admin','manager','coach','player','read_only'))");
+    // Also simulate a pre-multi-role production database: one role per membership, no role column on the scope table.
+    await getPool().query(`
+      ALTER TABLE membership_team_access DROP CONSTRAINT membership_team_access_user_id_club_id_fkey;
+      ALTER TABLE membership_team_access DROP CONSTRAINT membership_team_access_pkey;
+      ALTER TABLE club_memberships DROP CONSTRAINT club_memberships_pkey;
+      ALTER TABLE club_memberships ADD CONSTRAINT club_memberships_pkey PRIMARY KEY(user_id,club_id);
+      ALTER TABLE membership_team_access DROP COLUMN role;
+      ALTER TABLE membership_team_access ADD CONSTRAINT membership_team_access_pkey PRIMARY KEY(user_id,club_id);
+      ALTER TABLE membership_team_access ADD CONSTRAINT membership_team_access_user_id_club_id_fkey
+        FOREIGN KEY(user_id,club_id) REFERENCES club_memberships(user_id,club_id) ON DELETE CASCADE;
+      DROP TABLE IF EXISTS active_roles;
+    `);
+    const legacyPassword = randomBytes(24).toString("base64url");
+    const legacyUser = await pgAuth.api.signUpEmail({ body: { email: "legacy-membership@example.test", name: "Legacy membership", password: legacyPassword } });
+    await getPool().query("INSERT INTO clubs(id,name) VALUES('legacy-club','Legacy club')");
+    await getPool().query("INSERT INTO club_memberships(user_id,club_id,role) VALUES($1,'legacy-club','manager')", [legacyUser.user.id]);
+    await getPool().query('INSERT INTO membership_team_access(user_id,club_id,team_ids) VALUES($1,\'legacy-club\',\'["legacy-team"]\')', [legacyUser.user.id]);
     await getPool().query(postgresSchema);
     await getPool().query(postgresSchema); // idempotent application migration
+    // The pre-existing single-role membership and its team scope survive the widening with zero data loss,
+    // and the member can now hold a second role for the same club (previously impossible under the old PK).
+    assert.deepEqual((await getPool().query("SELECT role FROM club_memberships WHERE user_id=$1", [legacyUser.user.id])).rows, [{ role: "manager" }]);
+    assert.deepEqual((await getPool().query("SELECT role,team_ids FROM membership_team_access WHERE user_id=$1", [legacyUser.user.id])).rows, [{ role: "manager", team_ids: '["legacy-team"]' }]);
+    await getPool().query("INSERT INTO club_memberships(user_id,club_id,role) VALUES($1,'legacy-club','ladies_1s_captain')", [legacyUser.user.id]);
+    assert.equal((await getPool().query("SELECT count(*) AS n FROM club_memberships WHERE user_id=$1", [legacyUser.user.id])).rows[0].n, "2");
+    // The import below requires an empty destination; this scratch user/club were only needed to prove the migration.
+    await getPool().query('DELETE FROM "user" WHERE id=$1', [legacyUser.user.id]);
+    await getPool().query("DELETE FROM clubs WHERE id='legacy-club'");
     const result = await importSqlite(source, getPool());
     assert.equal(result.counts.membership_team_access, 1);
     assert.deepEqual((await readClub(user.user.id, "club")).club.teamIds, ["team"]);

@@ -22,11 +22,11 @@ import {
   subscribeStorage,
 } from "./storage";
 import type { Snapshot } from "./validation";
-type Club = { id: string; name: string; role: Role };
+type Club = { id: string; name: string; role: Role; availableRoles: Role[] };
 type Workspace = {
   club: Club;
   clubs: Club[];
-  user: { name: string };
+  user: { id: string; name: string };
   data: Snapshot;
   revision: number;
 };
@@ -37,9 +37,11 @@ type TeamContextValue = {
   setActiveTeamId: (id: string) => void;
   club: Club;
   clubs: Club[];
+  userId: string;
   userName: string;
   canWrite: boolean;
   switchClub: (id: string) => void;
+  switchRole: (role: Role) => void;
 };
 const TeamContext = createContext<TeamContextValue | null>(null);
 export function TeamProvider({ children }: { children: ReactNode }) {
@@ -121,6 +123,26 @@ export function TeamProvider({ children }: { children: ReactNode }) {
   const teams = loadTeams();
   const activeTeam =
     teams.find((t) => t.id === activeTeamId) ?? teams[0] ?? null;
+  const clubId = workspace.club.id;
+  async function switchRole(role: Role) {
+    if (hasUnsavedChanges()) {
+      setError("Save or export your draft and reload before switching roles.");
+      return;
+    }
+    try {
+      const response = await fetch("/api/active-role", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clubId, role }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Unable to switch role.");
+      setWorkspace(null);
+      void load(clubId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to switch role.");
+    }
+  }
   return (
     <TeamContext.Provider
       value={{
@@ -132,9 +154,11 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         },
         club: workspace.club,
         clubs: workspace.clubs,
+        userId: workspace.user.id,
         userName: workspace.user.name,
         canWrite: canManage(workspace.club.role),
         switchClub,
+        switchRole: (role) => void switchRole(role),
       }}
     >
       <div className="save-status" role="status" aria-live="polite">

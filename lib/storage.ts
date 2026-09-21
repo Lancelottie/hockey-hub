@@ -9,6 +9,8 @@ import type {
   Team,
 } from "./types";
 import { withFormation } from "./formation";
+import { emptyCaptainTaskChecklist } from "./captain-tasks";
+import { sameSection } from "./team-sections";
 import { emptySnapshot, type Snapshot } from "./validation";
 let snapshot = emptySnapshot();
 let clubId = "";
@@ -144,8 +146,9 @@ function pruneReferences() {
   for (const id of Object.keys(snapshot.assessments))
     if (!players.has(id)) delete snapshot.assessments[id];
   for (const [id, lineup] of Object.entries(snapshot.lineups)) {
+    const matchTeamId = matches.get(id)?.teamId;
     const valid = (pid: string) =>
-      players.has(pid) && players.get(pid)?.teamId === matches.get(id)?.teamId;
+      players.has(pid) && !!matchTeamId && sameSection(snapshot.teams, players.get(pid)!.teamId, matchTeamId);
     if (lineup.formation) {
       const removed = Object.values(lineup.formation.assignments).some(pid => !valid(pid));
       lineup.formation.assignments = Object.fromEntries(Object.entries(lineup.formation.assignments).filter(([, pid]) => valid(pid)));
@@ -156,8 +159,9 @@ function pruneReferences() {
     lineup.subs = lineup.subs.map((p) => (p && valid(p) ? p : null));
   }
   for (const [id, review] of Object.entries(snapshot.reviews)) {
+    const matchTeamId = matches.get(id)?.teamId;
     const valid = (pid: string) =>
-      players.has(pid) && players.get(pid)?.teamId === matches.get(id)?.teamId;
+      players.has(pid) && !!matchTeamId && sameSection(snapshot.teams, players.get(pid)!.teamId, matchTeamId);
     for (const pid of Object.keys(review.playerFeedback))
       if (!valid(pid)) delete review.playerFeedback[pid];
     if (!valid(review.womanOfTheMatchPlayerId))
@@ -208,19 +212,7 @@ export function saveLineup(id: string, value: Lineup) {
 }
 export function loadCaptainTasks(id: string): CaptainTaskChecklist {
   return structuredClone(
-    snapshot.captainTasks[id] ?? {
-      pushback: "",
-      warmupStart: "",
-      northernKit: "",
-      oppositionKit: "",
-      teas: "",
-      lifts: "",
-      notable: "",
-      keepersKit: "",
-      firstAidKit: "",
-      awayBalls: "",
-      umpires: "",
-    },
+    snapshot.captainTasks[id] ?? emptyCaptainTaskChecklist(),
   );
 }
 export function saveCaptainTasks(id: string, value: CaptainTaskChecklist) {

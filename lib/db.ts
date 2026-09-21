@@ -1,6 +1,8 @@
 import { roleSqlValues } from "./users";
 import Database from "better-sqlite3";
 import { migrateEnglandHockey } from "./england-hockey/migration";
+import { migrateSubmissions } from "./submissions";
+import { migratePlayerTeams } from "./player-teams";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
@@ -36,12 +38,13 @@ export function migrateApp() {
       user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
       club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
       role TEXT NOT NULL CHECK(role IN (${roleSqlValues})),
-      PRIMARY KEY(user_id, club_id)
+      PRIMARY KEY(user_id, club_id, role)
     );
     CREATE TABLE IF NOT EXISTS membership_team_access (
-      user_id TEXT NOT NULL, club_id TEXT NOT NULL, team_ids TEXT NOT NULL,
-      PRIMARY KEY(user_id,club_id),
-      FOREIGN KEY(user_id,club_id) REFERENCES club_memberships(user_id,club_id) ON DELETE CASCADE
+      user_id TEXT NOT NULL, club_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN (${roleSqlValues})), team_ids TEXT NOT NULL,
+      PRIMARY KEY(user_id,club_id,role),
+      FOREIGN KEY(user_id,club_id,role) REFERENCES club_memberships(user_id,club_id,role) ON DELETE CASCADE
     );
     CREATE TABLE IF NOT EXISTS teams (
       club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
@@ -75,13 +78,27 @@ export function migrateApp() {
     );
   `);
   migrateMembershipRoles(getDb());
+  migrateMultiRole(getDb());
   migrateEnglandHockey(getDb());
+  migrateSubmissions(getDb());
+  migratePlayerTeams(getDb());
+  // A member may hold several roles per club (e.g. club_admin and a team captaincy) and
+  // switch which is active; requires club_memberships' PK to already include role (above).
+  getDb().exec(`
+    CREATE TABLE IF NOT EXISTS active_roles (
+      user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+      club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK(role IN (${roleSqlValues})),
+      PRIMARY KEY(user_id,club_id),
+      FOREIGN KEY(user_id,club_id,role) REFERENCES club_memberships(user_id,club_id,role) ON DELETE CASCADE
+    );
+  `);
 }
 
 /** SQLite requires rebuilding a table to expand a CHECK constraint. Preserve child scopes. */
 export function migrateMembershipRoles(db: Database.Database) {
   const schema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='club_memberships'").get() as { sql: string };
-  if (schema.sql.includes("'ladies_3s_vice_captain'")) return;
+  if (schema.sql.includes("'northern_hockey_admin'")) return;
   if (db.inTransaction) throw new Error("Run the role migration outside an existing transaction.");
   const foreignKeys = db.pragma("foreign_keys", { simple: true });
   db.pragma("foreign_keys = OFF");
@@ -100,6 +117,44 @@ export function migrateMembershipRoles(db: Database.Database) {
       `);
       const violations = db.pragma("foreign_key_check");
       if (!Array.isArray(violations) || violations.length) throw new Error("Role migration would break membership references.");
+    })();
+  } finally { db.pragma(`foreign_keys = ${foreignKeys ? "ON" : "OFF"}`); }
+}
+
+/** Widens club_memberships/membership_team_access so a member may hold several roles per club. */
+export function migrateMultiRole(db: Database.Database) {
+  const schema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='club_memberships'").get() as { sql: string };
+  if (schema.sql.includes("PRIMARY KEY(user_id,club_id,role)")) return;
+  if (db.inTransaction) throw new Error("Run the multi-role migration outside an existing transaction.");
+  const foreignKeys = db.pragma("foreign_keys", { simple: true });
+  db.pragma("foreign_keys = OFF");
+  try {
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE club_memberships_multi (
+          user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+          club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK(role IN (${roleSqlValues})),
+          PRIMARY KEY(user_id,club_id,role)
+        );
+        INSERT INTO club_memberships_multi SELECT user_id,club_id,role FROM club_memberships;
+        CREATE TABLE membership_team_access_scoped (
+          user_id TEXT NOT NULL, club_id TEXT NOT NULL,
+          role TEXT NOT NULL CHECK(role IN (${roleSqlValues})), team_ids TEXT NOT NULL,
+          PRIMARY KEY(user_id,club_id,role),
+          FOREIGN KEY(user_id,club_id,role) REFERENCES club_memberships_multi(user_id,club_id,role) ON DELETE CASCADE
+        );
+        INSERT INTO membership_team_access_scoped(user_id,club_id,role,team_ids)
+          SELECT s.user_id, s.club_id, m.role, s.team_ids
+          FROM membership_team_access s JOIN club_memberships m
+            ON m.user_id = s.user_id AND m.club_id = s.club_id;
+        DROP TABLE membership_team_access;
+        DROP TABLE club_memberships;
+        ALTER TABLE club_memberships_multi RENAME TO club_memberships;
+        ALTER TABLE membership_team_access_scoped RENAME TO membership_team_access;
+      `);
+      const violations = db.pragma("foreign_key_check");
+      if (!Array.isArray(violations) || violations.length) throw new Error("Multi-role migration would break membership references.");
     })();
   } finally { db.pragma(`foreign_keys = ${foreignKeys ? "ON" : "OFF"}`); }
 }

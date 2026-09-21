@@ -5,6 +5,7 @@ export const ROLES = [
   "coach",
   "player",
   "read_only",
+  "northern_hockey_admin",
   "ladies_1s_captain",
   "ladies_1s_vice_captain",
   "ladies_2s_captain",
@@ -31,5 +32,31 @@ export function canManage(role: Role) {
 export function canAdmin(role: Role) {
   return role === "administrator" || role === "club_admin";
 }
+// Deliberately excluded from canManage/canAdmin: club-wide visibility across all teams,
+// scoped only to England Hockey submissions and cross-team squad pooling.
+export function isNorthernHockeyAdmin(role: Role) {
+  return role === "northern_hockey_admin";
+}
 // Values are a fixed application-owned allowlist, never user input.
 export const roleSqlValues = ROLES.map(role => `'${role}'`).join(",");
+
+// Every Role exactly once, most-privileged first. Determines which held role becomes
+// active by default for a member who hasn't explicitly switched (see lib/repository.ts).
+export const ROLE_PRIORITY: readonly Role[] = [
+  "administrator",
+  "club_admin",
+  "northern_hockey_admin",
+  "manager",
+  "coach",
+  "ladies_1s_captain",
+  "ladies_1s_vice_captain",
+  "ladies_2s_captain",
+  "ladies_3s_captain",
+  "ladies_3s_vice_captain",
+  "player",
+  "read_only",
+] as const satisfies readonly Role[];
+
+export function defaultActiveRole(roles: Role[]): Role {
+  return ROLE_PRIORITY.find(role => roles.includes(role)) ?? roles[0];
+}

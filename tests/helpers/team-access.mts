@@ -23,13 +23,14 @@ export async function checkTeamAccess() {
     initial.players.push({ id: `p-${id}`, teamId: id, name: id, number: 1, position: "Forward" });
     initial.matches.push({ id: `m-${id}`, teamId: id, opponent: id, date: "", isHome: true });
     initial.lineups[`m-${id}`] = { placements: [], subs: [] };
-    initial.captainTasks[`m-${id}`] = { pushback: "", warmupStart: "", northernKit: "", oppositionKit: "", teas: id, lifts: "", notable: "", keepersKit: "", firstAidKit: "", awayBalls: "", umpires: "" };
+    const emptyTask = { done: false, answer: "" };
+    initial.captainTasks[`m-${id}`] = { pushback: emptyTask, warmupStart: emptyTask, northernKit: emptyTask, oppositionKit: emptyTask, teas: { done: true, answer: id }, lifts: emptyTask, notable: emptyTask, keepersKit: emptyTask, firstAidKit: emptyTask, awayBalls: emptyTask, umpires: emptyTask, gmsUpdated: emptyTask };
     initial.reviews[`m-${id}`] = { ourScore: "", oppositionScore: "", goalscorers: "", assists: "", summary: id, womanOfTheMatchPlayerId: "", playerFeedback: { [`p-${id}`]: id } };
     initial.assessments[`p-${id}`] = { attending: true, fitness: 3, passingBall: 3, receivingBall: 3, defending: 3, attackingPlay: 3, transition: 3, attitudeCommitment: 3, teamworkCommunication: 3, lastSeasonTeam: "2s" };
   }
   await writeClub(user.id, "scoped", 0, initial);
   await db.prepare("UPDATE club_memberships SET role='manager' WHERE user_id=?").run(user.id);
-  await db.prepare("INSERT INTO membership_team_access VALUES(?,?,?)").run(user.id, "scoped", '["second"]');
+  await db.prepare("INSERT INTO membership_team_access(user_id,club_id,role,team_ids) VALUES(?,?,?,?)").run(user.id, "scoped", "manager", '["second"]');
   const response = await getAuth().api.signInEmail({ body: { email: user.email, password }, asResponse: true });
   assert.equal(response.status, 200);
   const cookie = response.headers.get("set-cookie")!.split(";")[0];
@@ -59,7 +60,8 @@ export async function checkTeamAccess() {
   assert.equal((await save(stolenDoc)).status, 400);
   assert.equal((await sourceGET(new Request(`${url}/api/england-hockey?clubId=scoped&teamId=first`, { headers: { cookie } }))).status, 403);
   assert.equal((await sourcePOST(new Request(`${url}/api/england-hockey`, { method: "POST", headers: { cookie, origin: url, "content-type": "application/json" }, body: JSON.stringify({ clubId: "scoped", teamId: "first", revision: visible.revision }) }))).status, 403);
-  assert.equal((await sourceGET(new Request(`${url}/api/england-hockey?clubId=scoped&teamId=second`, { headers: { cookie } }))).status, 200);
+  // England Hockey access is now restricted to the Northern Hockey Admin role; a scoped manager has none, even for their own team.
+  assert.equal((await sourceGET(new Request(`${url}/api/england-hockey?clubId=scoped&teamId=second`, { headers: { cookie } }))).status, 403);
   const changed = structuredClone(visible.data);
   changed.players[0].name = "Edited by vice captain";
   changed.teams[0].formationPresets[0].name = "Vice preset";
@@ -84,8 +86,9 @@ export async function checkTeamAccess() {
     for (const key of ["lineups", "captainTasks", "reviews"] as const) assert.deepEqual(full[key][`m-${id}`], initial[key][`m-${id}`]);
     assert.deepEqual(full.assessments[`p-${id}`], initial.assessments[`p-${id}`]);
   }
-  await db.prepare("INSERT INTO membership_team_access VALUES(?,?,?)").run(user.id, "scoped", '["first"]');
+  // The scope row's role FK must already exist in club_memberships, so set the role first.
   await db.prepare("UPDATE club_memberships SET role='read_only' WHERE user_id=?").run(user.id);
+  await db.prepare("INSERT INTO membership_team_access(user_id,club_id,role,team_ids) VALUES(?,?,?,?)").run(user.id, "scoped", "read_only", '["first"]');
   const readOnly = await readClub(user.id, "scoped");
   assert.equal(readOnly.data.teams.length, 1);
   assert.deepEqual(readOnly.data.reviews, {});
@@ -108,7 +111,7 @@ export async function checkTeamAccess() {
     changed.teams[0].name = "Cannot rename the club team";
     await assert.rejects(writeClub(user.id, "scoped", scoped.revision + 1, changed), AccessError);
     // Even an incorrectly assigned explicit scope must not widen the named role.
-    await db.prepare("INSERT INTO membership_team_access VALUES(?,?,?)").run(user.id, "scoped", JSON.stringify([wrongTeam]));
+    await db.prepare("INSERT INTO membership_team_access(user_id,club_id,role,team_ids) VALUES(?,?,?,?)").run(user.id, "scoped", role, JSON.stringify([wrongTeam]));
     assert.deepEqual((await readClub(user.id, "scoped")).data, emptySnapshot());
     await db.prepare("DELETE FROM membership_team_access WHERE user_id=?").run(user.id);
   }

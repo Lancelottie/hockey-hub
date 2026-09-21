@@ -1,9 +1,9 @@
 "use client";
 import Link from "next/link";
-import { roleLabel } from "@/lib/users";
+import { roleLabel, type Role } from "@/lib/users";
 import { useTeam } from "@/lib/team-context";
 export default function Topbar() {
-  const { teams, activeTeam, setActiveTeamId, club } = useTeam();
+  const { teams, activeTeam, setActiveTeamId, club, switchRole } = useTeam();
   return (
     <div className="team-bar">
       <div>
@@ -27,7 +27,24 @@ export default function Topbar() {
         </label>
       </div>
       <div className="flex flex-wrap items-center gap-4 text-sm">
-        <span className="role-badge">{roleLabel(club.role)}</span>
+        {club.availableRoles.length > 1 ? (
+          <label>
+            <span className="sr-only">Acting as</span>
+            <select
+              className="role-badge"
+              value={club.role}
+              onChange={(e) => switchRole(e.target.value as Role)}
+            >
+              {club.availableRoles.map((role) => (
+                <option key={role} value={role}>
+                  {roleLabel(role)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <span className="role-badge">{roleLabel(club.role)}</span>
+        )}
         <Link href="/teams">All teams</Link>
       </div>
     </div>

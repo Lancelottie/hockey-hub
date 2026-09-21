@@ -31,7 +31,7 @@ export async function GET(request: Request) {
       {
         ...(await readClub(session.user.id, id)),
         clubs,
-        user: { name: session.user.name },
+        user: { id: session.user.id, name: session.user.name },
       },
       { headers: { "Cache-Control": "private, no-store" } },
     );

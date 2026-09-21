@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Shirt, Trash2 } from "lucide-react";
+import { Shirt, Trash2, X } from "lucide-react";
 import { useTeam } from "@/lib/team-context";
 import { GOALKEEPER_COLORS, GOALKEEPER_KITS } from "@/lib/kit-colors";
 import { loadPlayers, savePlayers } from "@/lib/storage";
+import { sectionKey } from "@/lib/team-sections";
+import { isNorthernHockeyAdmin } from "@/lib/users";
 import type { Player, PlayerPosition } from "@/lib/types";
 import NewPlayerForm from "./new-player-form";
 
@@ -14,12 +16,6 @@ const POSITIONS: PlayerPosition[] = [
   "Midfielder",
   "Forward",
 ];
-
-function sectionKey(teamName: string): "ladies" | "mens" | null {
-  if (/^ladies/i.test(teamName)) return "ladies";
-  if (/^mens/i.test(teamName)) return "mens";
-  return null;
-}
 
 function sectionLabel(teamName: string): string {
   const key = sectionKey(teamName);
@@ -39,14 +35,78 @@ function squadLabel(teamName: string): string {
 }
 
 export default function SquadsPage() {
-  const { activeTeam, teams } = useTeam();
+  const { activeTeam, teams, club, canWrite } = useTeam();
   const [players, setPlayers] = useState<Player[]>([]);
+  const [memberships, setMemberships] = useState<Record<string, string[]>>({});
+  const [membershipError, setMembershipError] = useState("");
+  const canPool = canWrite || isNorthernHockeyAdmin(club.role);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setPlayers(loadPlayers());
   }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/player-teams?clubId=${encodeURIComponent(club.id)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        if (controller.signal.aborted) return;
+        const next: Record<string, string[]> = {};
+        for (const membership of result.memberships as { playerId: string; teamId: string }[])
+          next[membership.playerId] = [...(next[membership.playerId] ?? []), membership.teamId];
+        setMemberships(next);
+      })
+      .catch((e) => {
+        if (!controller.signal.aborted)
+          setMembershipError(
+            e instanceof Error ? e.message : "Unable to load cross-team assignments.",
+          );
+      });
+    return () => controller.abort();
+  }, [club.id]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  async function addMembership(playerId: string, teamId: string) {
+    setMembershipError("");
+    try {
+      const response = await fetch("/api/player-teams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clubId: club.id, playerId, teamId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Unable to add team.");
+      setMemberships((current) => ({
+        ...current,
+        [playerId]: [...(current[playerId] ?? []), teamId],
+      }));
+    } catch (e) {
+      setMembershipError(e instanceof Error ? e.message : "Unable to add team.");
+    }
+  }
+
+  async function removeMembership(playerId: string, teamId: string) {
+    setMembershipError("");
+    try {
+      const response = await fetch("/api/player-teams", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clubId: club.id, playerId, teamId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Unable to remove team.");
+      setMemberships((current) => ({
+        ...current,
+        [playerId]: (current[playerId] ?? []).filter((id) => id !== teamId),
+      }));
+    } catch (e) {
+      setMembershipError(e instanceof Error ? e.message : "Unable to remove team.");
+    }
+  }
 
   const sectionTeams = useMemo(() => {
     if (!activeTeam) return [];
@@ -190,20 +250,23 @@ export default function SquadsPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[68rem] table-fixed text-sm">
+          <table className="w-full min-w-[78rem] table-fixed text-sm">
             <thead className="bg-[var(--surface-primary)] text-[var(--text-secondary)]">
               <tr className="border-b border-[var(--border-primary)]">
                 <th className="w-20 px-4 py-3 text-left font-medium">No.</th>
-                <th className="w-[24%] px-4 py-3 text-left font-medium">
+                <th className="w-[20%] px-4 py-3 text-left font-medium">
                   Name
                 </th>
-                <th className="w-[18%] px-4 py-3 text-left font-medium">
+                <th className="w-[14%] px-4 py-3 text-left font-medium">
                   Position
                 </th>
-                <th className="w-[20%] px-4 py-3 text-left font-medium">
+                <th className="w-[15%] px-4 py-3 text-left font-medium">
                   Season team
                 </th>
                 <th className="w-[20%] px-4 py-3 text-left font-medium">
+                  Additional teams
+                </th>
+                <th className="w-[15%] px-4 py-3 text-left font-medium">
                   Keeper top
                 </th>
                 <th className="w-20 px-4 py-3 text-right font-medium">
@@ -281,6 +344,54 @@ export default function SquadsPage() {
                       ))}
                     </select>
                   </td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(memberships[player.id] ?? []).map((teamId) => (
+                        <span
+                          key={teamId}
+                          className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--text-primary)]"
+                        >
+                          {squadLabel(teamNameById[teamId] ?? teamId)}
+                          {canPool && (
+                            <button
+                              type="button"
+                              onClick={() => void removeMembership(player.id, teamId)}
+                              aria-label={`Remove ${teamNameById[teamId] ?? teamId} from ${player.name}`}
+                              className="text-[var(--text-muted)] hover:text-[var(--status-critical)]"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                      {canPool &&
+                        (() => {
+                          const options = sectionTeams.filter(
+                            (team) =>
+                              team.id !== player.teamId &&
+                              !(memberships[player.id] ?? []).includes(team.id),
+                          );
+                          if (options.length === 0) return null;
+                          return (
+                            <select
+                              value=""
+                              onChange={(event) => {
+                                if (event.target.value)
+                                  void addMembership(player.id, event.target.value);
+                              }}
+                              className="rounded-lg border border-[var(--border-primary)] bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
+                            >
+                              <option value="">+ Add team</option>
+                              {options.map((team) => (
+                                <option key={team.id} value={team.id}>
+                                  {squadLabel(team.name)}
+                                </option>
+                              ))}
+                            </select>
+                          );
+                        })()}
+                    </div>
+                  </td>
                   <td className="px-4 py-4">{renderKeeperKitButtons(player)}</td>
                   <td className="px-4 py-4 text-right">
                     <button
@@ -296,7 +407,7 @@ export default function SquadsPage() {
               {sectionPlayers.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-4 py-10 text-center text-sm text-[var(--text-muted)]"
                   >
                     No players in this section yet.
@@ -307,6 +418,11 @@ export default function SquadsPage() {
           </table>
         </div>
       </div>
+      {membershipError && (
+        <p role="alert" className="text-sm text-[var(--status-critical)]">
+          {membershipError}
+        </p>
+      )}
     </div>
   );
 }
