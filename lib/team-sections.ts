@@ -1,8 +1,17 @@
 import type { Team } from "./types";
 
-export function sectionKey(teamName: string): "ladies" | "mens" | null {
+export const SECTION_KEYS = ["ladies", "mens", "juniors"] as const;
+export type SectionKey = (typeof SECTION_KEYS)[number];
+export const SECTION_LABELS: Record<SectionKey, string> = {
+  ladies: "Ladies",
+  mens: "Mens",
+  juniors: "Juniors",
+};
+
+export function sectionKey(teamName: string): SectionKey | null {
   if (/^ladies/i.test(teamName)) return "ladies";
   if (/^mens/i.test(teamName)) return "mens";
+  if (/^juniors/i.test(teamName)) return "juniors";
   return null;
 }
 

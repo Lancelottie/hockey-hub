@@ -3,6 +3,7 @@ import Database from "better-sqlite3";
 import { migrateEnglandHockey } from "./england-hockey/migration";
 import { migrateSubmissions } from "./submissions";
 import { migratePlayerTeams } from "./player-teams";
+import { migrateAccessRequests } from "./access-requests";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
@@ -82,6 +83,7 @@ export function migrateApp() {
   migrateEnglandHockey(getDb());
   migrateSubmissions(getDb());
   migratePlayerTeams(getDb());
+  migrateAccessRequests(getDb());
   // A member may hold several roles per club (e.g. club_admin and a team captaincy) and
   // switch which is active; requires club_memberships' PK to already include role (above).
   getDb().exec(`

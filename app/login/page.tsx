@@ -18,7 +18,7 @@ export default function LoginPage() {
           "Sign-in failed. Check your details or wait a minute before trying again.",
         );
       } else {
-        window.location.assign("/home");
+        window.location.assign("/sections");
       }
     } catch {
       setError("Unable to connect. Please try again.");
@@ -82,9 +82,12 @@ export default function LoginPage() {
           <button className="primary-button w-full" disabled={busy}>
             {busy ? "Signing in…" : "Sign in →"}
           </button>
+          <Link href="/request-access" className="secondary-button mt-3 w-full">
+            Request access
+          </Link>
           <p className="mt-6 text-sm text-[var(--text-secondary)]">
-            Access is arranged by your club administrator. Contact them if you
-            need an account or password assistance.
+            New here? Request access above and a club administrator will set
+            up your account.
           </p>
         </form>
       </section>

@@ -16,7 +16,17 @@ import { CAPTAIN_TASK_KEYS, isCaptainTaskApplicable } from "@/lib/captain-tasks"
 import { formatFixtureLabel, formatMatchDateLong, isUpcomingFixture } from "@/lib/match-format";
 import { readLegacy } from "@/lib/legacy-import";
 import { snapshotSchema, type Snapshot } from "@/lib/validation";
+import { ACCESS_REQUEST_LEVEL_LABELS, type AccessRequestLevel } from "@/lib/access-request-levels";
+import { SECTION_LABELS, type SectionKey } from "@/lib/team-sections";
 type Member = { userId: string; name: string; email: string; roles: Role[] };
+type AccessRequest = {
+  id: string;
+  name: string;
+  email: string;
+  sections: SectionKey[];
+  requestedLevels: AccessRequestLevel[];
+  createdAt: string;
+};
 export default function AdminPage() {
   const { club, teams, userId } = useTeam();
   const [name, setName] = useState("");
@@ -26,6 +36,46 @@ export default function AdminPage() {
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState("");
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
+  const [accessRequestsError, setAccessRequestsError] = useState("");
+  const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!canAdmin(club.role)) return;
+    const controller = new AbortController();
+    fetch(`/api/access-requests?clubId=${encodeURIComponent(club.id)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        if (controller.signal.aborted) return;
+        setAccessRequests(result.requests);
+      })
+      .catch((e) => {
+        if (!controller.signal.aborted)
+          setAccessRequestsError(e instanceof Error ? e.message : "Unable to load access requests.");
+      });
+    return () => controller.abort();
+  }, [club.id, club.role]);
+  async function resolveRequest(id: string) {
+    setResolvingRequestId(id);
+    setAccessRequestsError("");
+    try {
+      const response = await fetch("/api/access-requests", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clubId: club.id, id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Unable to update the request.");
+      setAccessRequests(result.requests);
+    } catch (e) {
+      setAccessRequestsError(e instanceof Error ? e.message : "Unable to update the request.");
+    } finally {
+      setResolvingRequestId(null);
+    }
+  }
   useEffect(() => {
     if (!canAdmin(club.role)) return;
     const controller = new AbortController();
@@ -189,6 +239,46 @@ export default function AdminPage() {
               </li>
             ))}
           </ul>
+        </section>
+      )}
+      {accessRequests.length > 0 && (
+        <section className="rounded-[20px] border border-[var(--status-warning)] bg-[var(--status-warning-light)] p-5">
+          <h2 className="text-lg font-bold text-[var(--status-warning)]">
+            Access requests
+          </h2>
+          <p className="mt-1 text-sm text-[var(--status-warning)]">
+            These people have asked to join {club.name}. Create their account, then mark the request done.
+          </p>
+          <ul className="mt-4 space-y-3">
+            {accessRequests.map((request) => (
+              <li
+                key={request.id}
+                className="rounded-lg bg-[var(--surface-primary)] p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-[var(--text-primary)]">
+                    {request.name} · {request.email}
+                  </p>
+                  <button
+                    className="text-sm underline disabled:opacity-55"
+                    disabled={resolvingRequestId === request.id}
+                    onClick={() => void resolveRequest(request.id)}
+                  >
+                    Mark account created →
+                  </button>
+                </div>
+                <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                  {request.sections.map((s) => SECTION_LABELS[s]).join(", ")} ·{" "}
+                  {request.requestedLevels.map((l) => ACCESS_REQUEST_LEVEL_LABELS[l]).join(", ")}
+                </p>
+              </li>
+            ))}
+          </ul>
+          {accessRequestsError && (
+            <p role="alert" className="mt-3 text-sm text-[var(--status-critical)]">
+              {accessRequestsError}
+            </p>
+          )}
         </section>
       )}
       <div className="grid gap-6 lg:grid-cols-2">

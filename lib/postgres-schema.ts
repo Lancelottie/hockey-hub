@@ -105,6 +105,14 @@ export const postgresSchema = `
       FOREIGN KEY(club_id,player_id) REFERENCES players(club_id,id) ON DELETE CASCADE,
       FOREIGN KEY(club_id,team_id) REFERENCES teams(club_id,id) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS access_requests (
+      id TEXT PRIMARY KEY,
+      club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+      name TEXT NOT NULL, email TEXT NOT NULL, sections TEXT NOT NULL,
+      requested_levels TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','done')),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE TABLE IF NOT EXISTS data_migrations (
       id TEXT PRIMARY KEY, source_digest TEXT NOT NULL, counts TEXT NOT NULL,
       completed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP

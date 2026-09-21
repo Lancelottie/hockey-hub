@@ -29,6 +29,17 @@ test("protected routes, sign-in and player filtering", async ({
     .getByLabel("Password", { exact: true })
     .fill(process.env.E2E_PASSWORD!);
   await page.getByRole("button", { name: "Sign in →", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Choose your section" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Mens" }),
+  ).toBeDisabled();
+  await page.screenshot({
+    path: "test-results/sections-desktop.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Ladies" }).click();
   await expect(page.getByRole("heading", { name: /Your team/ })).toBeVisible();
   await page.screenshot({
     path: "test-results/home-desktop.png",

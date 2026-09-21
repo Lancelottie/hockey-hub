@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import { sameSection, sectionKey, sectionTeamIds } from "../lib/team-sections";
 import { emptySnapshot, snapshotSchema } from "../lib/validation";
 
-test("sectionKey groups by the Ladies/Mens name prefix only", () => {
+test("sectionKey groups by the Ladies/Mens/Juniors name prefix only", () => {
   assert.equal(sectionKey("Ladies 1s"), "ladies");
   assert.equal(sectionKey("ladies 3s"), "ladies");
   assert.equal(sectionKey("Mens 1s"), "mens");
+  assert.equal(sectionKey("Juniors U14"), "juniors");
+  assert.equal(sectionKey("juniors development"), "juniors");
   assert.equal(sectionKey("First XI"), null);
 });
 
