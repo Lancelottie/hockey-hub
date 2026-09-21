@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { useTeam } from "@/lib/team-context";
-import { canAdmin } from "@/lib/users";
+import { canAdmin, isNorthernHockeyAdmin } from "@/lib/users";
 import LogoutButton from "../logout-button";
 const items = [
   { href: "/home", label: "Home" },
@@ -48,6 +48,9 @@ export default function Sidebar() {
         >
           {[
             ...items,
+            ...(isNorthernHockeyAdmin(club.role)
+              ? [{ href: "/registrations", label: "Registrations" }]
+              : []),
             ...(canAdmin(club.role)
               ? [{ href: "/admin", label: "Admin" }]
               : []),

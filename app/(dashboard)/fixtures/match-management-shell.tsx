@@ -11,10 +11,18 @@ import PostMatch from "./post-match";
 
 type TabKey = "lineup" | "captain-tasks" | "post-match";
 
-export default function MatchManagementShell({ matchId }: { matchId: string }) {
+export default function MatchManagementShell({
+  matchId,
+  initialTab = "lineup",
+  highlightOutstanding = false,
+}: {
+  matchId: string;
+  initialTab?: TabKey;
+  highlightOutstanding?: boolean;
+}) {
   const { activeTeam, teams, setActiveTeamId } = useTeam();
   const [matches, setMatches] = useState<Match[]>([]);
-  const [activeTab, setActiveTab] = useState<TabKey>("lineup");
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -111,6 +119,7 @@ export default function MatchManagementShell({ matchId }: { matchId: string }) {
         <CaptainTasks
           match={selectedMatch}
           teamName={activeTeam?.name ?? "Team"}
+          highlightOutstanding={highlightOutstanding}
         />
       ) : (
         <PostMatch

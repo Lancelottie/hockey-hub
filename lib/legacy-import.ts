@@ -1,3 +1,4 @@
+import { normalizeCaptainTasks } from "./captain-tasks";
 import { emptySnapshot, snapshotSchema, type Snapshot } from "./validation";
 // Read only: never clear, seed or reassign records in the old browser store.
 export function readLegacy(storage: Pick<Storage, "getItem">): Snapshot {
@@ -22,7 +23,7 @@ export function readLegacy(storage: Pick<Storage, "getItem">): Snapshot {
       const value = read(prefix + fixture.id, null);
       if (value !== null)
         data[key][fixture.id] = (
-          key === "captainTasks" ? { umpires: "", ...(value as object) } : value
+          key === "captainTasks" ? normalizeCaptainTasks(value) : value
         ) as never;
     }
   }

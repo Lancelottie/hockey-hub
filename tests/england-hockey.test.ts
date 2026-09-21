@@ -232,6 +232,7 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
     "coach",
     "player",
     "read_only",
+    "northern_hockey_admin",
   ]) {
     const user = (
       await auth.api.signUpEmail({
@@ -256,7 +257,8 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
   ).run();
   const opts = {
     clubId: "a",
-    actor: { userId: users.club_admin },
+    // England Hockey sync/read is restricted to the Northern Hockey Admin role.
+    actor: { userId: users.northern_hockey_admin },
     fetcher: remote(),
   };
   await t.test(
@@ -409,19 +411,19 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
         if (String(url).includes("/api/"))
           db.prepare(
             "UPDATE app_accounts SET status='suspended' WHERE user_id=?",
-          ).run(users.manager);
+          ).run(users.northern_hockey_admin);
         return remote()(url, init);
       };
       await assert.rejects(
         syncEnglandHockeyFixtures("one", {
           ...opts,
-          actor: { userId: users.manager },
+          actor: { userId: users.northern_hockey_admin },
           fetcher: revoke,
         }),
-        /permission/,
+        /Northern Hockey Admin/,
       );
       db.prepare("UPDATE app_accounts SET status='active' WHERE user_id=?").run(
-        users.manager,
+        users.northern_hockey_admin,
       );
     },
   );
@@ -448,7 +450,8 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
         revision: (await readClub(users.club_admin, "a")).revision,
       };
       assert.equal((await POST(request("none", body))).status, 401);
-      for (const role of ["player", "read_only"]) {
+      // England Hockey access is restricted to the Northern Hockey Admin role; every other role is rejected regardless of canManage/canAdmin.
+      for (const role of ["player", "read_only", "club_admin", "manager", "coach"]) {
         assert.equal((await POST(request(role, body))).status, 403);
         assert.equal(
           (
@@ -463,50 +466,50 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
         );
       }
       assert.equal(
-        (await POST(request("club_admin", { ...body, clubId: "b" }))).status,
+        (await POST(request("northern_hockey_admin", { ...body, clubId: "b" }))).status,
         403,
       );
       assert.equal(
         (
           await POST(
-            request("club_admin", { ...body, actor: { system: true } }),
+            request("northern_hockey_admin", { ...body, actor: { system: true } }),
           )
         ).status,
         400,
       );
       assert.equal(
-        (await POST(request("club_admin", body, "https://evil.test"))).status,
+        (await POST(request("northern_hockey_admin", body, "https://evil.test"))).status,
         403,
       );
       assert.equal(
-        (await POST(request("club_admin", "x".repeat(4097)))).status,
+        (await POST(request("northern_hockey_admin", "x".repeat(4097)))).status,
         413,
       );
       assert.equal(
         (
           await POST(
-            request("club_admin", { ...body, sourceUrl: "https://127.0.0.1" }),
+            request("northern_hockey_admin", { ...body, sourceUrl: "https://127.0.0.1" }),
           )
         ).status,
         422,
       );
       assert.equal(
-        (await POST(request("club_admin", { ...body, revision: 0 }))).status,
+        (await POST(request("northern_hockey_admin", { ...body, revision: 0 }))).status,
         409,
       );
     },
   );
   await t.test(
-    "HTTP successful manager sync returns a fresh workspace and readable summary",
+    "HTTP successful Northern Hockey Admin sync returns a fresh workspace and readable summary",
     async () => {
       const originalFetch = globalThis.fetch;
       globalThis.fetch = remote();
       try {
         const response = await POST(
-          request("manager", {
+          request("northern_hockey_admin", {
             clubId: "a",
             teamId: "one",
-            revision: (await readClub(users.manager, "a")).revision,
+            revision: (await readClub(users.northern_hockey_admin, "a")).revision,
           }),
         );
         assert.equal(response.status, 200);

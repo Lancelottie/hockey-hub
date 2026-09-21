@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTeam } from "@/lib/team-context";
 import { loadLineup, loadPlayers, loadTeams, saveLineup, saveTeams, subscribeStorage, fixtureSyncInProgress } from "@/lib/storage";
 import { assignPlayer, BUILTIN_PRESETS, DEFAULT_LINES, eligiblePlayers, generateSlots, lineLabel, playersForSlot, MAX_STARTERS, MAX_SUBS, playerAt, shirtMatches, swapPlayers, validLines, withFormation } from "@/lib/formation";
+import { sectionTeamIds } from "@/lib/team-sections";
 import type { Lineup, Match } from "@/lib/types";
 import Pitch from "../squad-selection/pitch";
 import PositionPicker from "./position-picker";
@@ -31,7 +32,12 @@ export default function FormationEditor({ match }: { match: Match }) {
   const [number, setNumber] = useState("");
   const [message, setMessage] = useState("");
   const numberInput = useRef<HTMLInputElement>(null);
-  const players = eligiblePlayers(loadPlayers(), match.teamId);
+  const teams = loadTeams();
+  const teamNameById = Object.fromEntries(teams.map(t => [t.id, t.name]));
+  const borrowTeamIds = sectionTeamIds(teams, match.teamId).filter(id => id !== match.teamId);
+  const players = eligiblePlayers(loadPlayers(), match.teamId, undefined, undefined, borrowTeamIds);
+  const playerLabel = (p: { id: string; name: string; number: number | null; teamId: string }) =>
+    `${p.name} · #${p.number ?? "—"}${p.teamId !== match.teamId ? ` (${teamNameById[p.teamId] ?? "other team"})` : ""}`;
   const formation = lineup.formation;
   const slots = formation ? generateSlots(formation.lines) : [];
   const allSlots = [...slots, ...Array.from({ length: MAX_SUBS }, (_, i) => ({ id: `sub-${i}`, label: `Substitute ${i + 1}`, x: 0, y: 0 }))];
@@ -106,12 +112,14 @@ export default function FormationEditor({ match }: { match: Match }) {
   function slotButton(slot: { id: string; label: string }, onPitch: boolean) {
     const player = players.find(p => p.id === playerAt(lineup, slot.id));
     const shirtColor = slot.id === "gk" ? GOALKEEPER_COLORS[player?.goalkeeperKit ?? "yellow"] : match.isHome ? HOME_COLOR : AWAY_COLOR;
+    const borrowed = player && player.teamId !== match.teamId;
     return <button type="button" data-slot={slot.id} disabled={!editable}
-      aria-label={`${slot.label}: ${player ? `${player.name}, number ${player.number ?? "unset"}` : "Empty"}`}
+      title={borrowed ? `Borrowed from ${teamNameById[player.teamId] ?? "another team"}` : undefined}
+      aria-label={`${slot.label}: ${player ? `${player.name}, number ${player.number ?? "unset"}${borrowed ? `, borrowed from ${teamNameById[player.teamId] ?? "another team"}` : ""}` : "Empty"}`}
       aria-pressed={selected === slot.id} aria-expanded={selected === slot.id} aria-controls={selected === slot.id ? "position-player-picker" : undefined} onClick={() => choose(slot.id)}
       className={`formation-slot ${selected === slot.id || swapFrom === slot.id ? "is-selected" : ""} ${onPitch ? "" : "bench-slot"}`}>
       <span className="formation-number" style={{ color: shirtColor }}><Shirt aria-hidden="true" fill="currentColor" strokeWidth={1.2} /><span style={{ color: shirtColor === GOALKEEPER_COLORS.yellow ? "#142b3f" : "white" }}>{player ? player.number ?? "•" : "+"}</span></span>
-      <span className="formation-player">{player ? player.name.split(" ")[0] : slot.id === "gk" ? "GK" : slots.find(s => s.id === slot.id)?.role === "Defender" ? "Defence" : slots.find(s => s.id === slot.id)?.role === "Midfielder" ? "Mid" : slots.find(s => s.id === slot.id)?.role === "Forward" ? "Forward" : "Select"}</span>
+      <span className="formation-player">{player ? `${player.name.split(" ")[0]}${borrowed ? "*" : ""}` : slot.id === "gk" ? "GK" : slots.find(s => s.id === slot.id)?.role === "Defender" ? "Defence" : slots.find(s => s.id === slot.id)?.role === "Midfielder" ? "Mid" : slots.find(s => s.id === slot.id)?.role === "Forward" ? "Forward" : "Select"}</span>
     </button>;
   }
   return <section aria-label="Team formation" className="panel min-w-0 space-y-4">
@@ -166,6 +174,7 @@ export default function FormationEditor({ match }: { match: Match }) {
       <div className="formation-selection-panel space-y-3">
         <h3 className="font-semibold">Choose your players</h3>
         <p className="text-sm">{lineup.placements.length}/{slots.length} starters assigned. Team players · fixture availability has not been recorded.</p>
+        {borrowTeamIds.length > 0 && <p className="text-sm">You can also temporarily assign players from {borrowTeamIds.map(id => teamNameById[id]).filter(Boolean).join(", ")} for this fixture only — marked with * on the pitch.</p>}
         {editable && <Link href="/squads" className="block text-sm underline">Manage team players</Link>}
         {editable && <p className="text-sm">Select a pitch or bench position, type a shirt number and press Enter. The next empty position is selected automatically. Editing a published team returns it to draft.</p>}
         {swapFrom && <div role="status">Select a destination to move or swap.<button className="ml-2 underline" onClick={() => setSwapFrom(null)}>Cancel swap</button></div>}
@@ -173,15 +182,15 @@ export default function FormationEditor({ match }: { match: Match }) {
           <h3 className="font-semibold">{allSlots.find(s => s.id === selected)?.label}</h3>
           {slots.some(s => s.id === selected) && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showAllPlayers} onChange={e => { setShowAllPlayers(e.target.checked); setMessage(""); }} />Show all positions</label>}
           {!positionPlayers.length && <p className="text-sm">No team players are recorded in this position. Update a player’s position or enable Show all positions.</p>}
-          {selectedPlayer && <p>{selectedPlayer.name} · #{selectedPlayer.number ?? "—"}</p>}
+          {selectedPlayer && <p>{playerLabel(selectedPlayer)}</p>}
           <form onSubmit={e => { e.preventDefault(); if (matches.length === 1) assign(matches[0].id); else setMessage(matches.length ? "Multiple players have this number. Choose a matching player below." : "No matching player in this position has that shirt number. Enable Show all positions to select outside their recorded role."); }}>
             <label>Shirt number<input ref={numberInput} className="formation-input w-full" inputMode="numeric" autoComplete="off" maxLength={3} value={number} onChange={e => setNumber(e.target.value)} /></label>
             <button className="mt-2 rounded border px-3 py-2" type="submit">Assign number</button>
           </form>
-          {matches.length > 1 && <div><p className="text-sm">Matching players — select one:</p>{matches.map(p => <button key={p.id} className="block py-2 underline" onClick={() => assign(p.id)}>{p.name} · #{p.number}</button>)}</div>}
+          {matches.length > 1 && <div><p className="text-sm">Matching players — select one:</p>{matches.map(p => <button key={p.id} className="block py-2 underline" onClick={() => assign(p.id)}>{playerLabel(p)}</button>)}</div>}
           <label>Select player<select id="lineup-player" className="formation-input w-full" value="" onChange={e => assign(e.target.value)}><option value="">Choose a player</option>{positionPlayers.map(p => {
             const occupied = allSlots.find(s => s.id !== selected && playerAt(lineup, s.id) === p.id);
-            return <option key={p.id} value={p.id} disabled={!!occupied}>{p.name} · #{p.number ?? "—"}{occupied ? ` — ${occupied.label}` : ""}</option>;
+            return <option key={p.id} value={p.id} disabled={!!occupied}>{playerLabel(p)}{occupied ? ` — ${occupied.label}` : ""}</option>;
           })}</select></label>
           {selectedPlayer && <div className="flex flex-wrap gap-2"><button className="rounded border px-3 py-2" onClick={() => { persist(assignPlayer(lineup, selected)); setMessage("Player removed."); }}>Remove player</button><button className="rounded border px-3 py-2" onClick={() => { setSwapFrom(selected); setSelected(null); }}>Move / swap</button></div>}
         <p role="status" aria-live="polite" className="text-sm">{message}</p>

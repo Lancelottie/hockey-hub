@@ -52,6 +52,16 @@ test("eligibility prioritises squad then availability then team, including empty
   assert.deepEqual(eligiblePlayers(players, "team", undefined, ["p2"]).map(p => p.id), ["p2"]);
   assert.deepEqual(eligiblePlayers(players, "team", []), []);
 });
+test("eligibility can temporarily widen to other teams (borrowed players)", () => {
+  const borrowed: Player = { id: "b1", teamId: "other", name: "Borrowed", number: 99, position: "Forward" };
+  const pool = [...players, borrowed];
+  assert.equal(eligiblePlayers(pool, "team").length, 12);
+  const widened = eligiblePlayers(pool, "team", undefined, undefined, ["other"]);
+  assert.equal(widened.length, 13);
+  assert.ok(widened.some(p => p.id === "b1"));
+  // Restriction (squad/availability) still applies across the widened pool.
+  assert.deepEqual(eligiblePlayers(pool, "team", ["b1"], undefined, ["other"]).map(p => p.id), ["b1"]);
+});
 const dir = mkdtempSync(join(tmpdir(), "hockey-formation-"));
 process.env.DATABASE_PATH = join(dir, "test.sqlite");
 after(() => { getDb().close(); rmSync(dir, { recursive: true, force: true }); });

@@ -51,9 +51,10 @@ export function withFormation(lineup: Lineup, formation: Formation): Lineup {
     }),
   };
 }
-export function eligiblePlayers(players: Player[], teamId: string, squadIds?: string[], availableIds?: string[]) {
+export function eligiblePlayers(players: Player[], teamId: string, squadIds?: string[], availableIds?: string[], extraTeamIds?: string[]) {
   const restriction = squadIds ?? availableIds;
-  return players.filter(p => p.teamId === teamId && (!restriction || restriction.includes(p.id)));
+  const teamIds = new Set([teamId, ...(extraTeamIds ?? [])]);
+  return players.filter(p => teamIds.has(p.teamId) && (!restriction || restriction.includes(p.id)));
 }
 export function shirtMatches(players: Player[], value: string) {
   return /^\d{1,3}$/.test(value.trim())

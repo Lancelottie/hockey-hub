@@ -3,11 +3,13 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useTeam } from "@/lib/team-context";
+import { isNorthernHockeyAdmin } from "@/lib/users";
 import {
   formatFixtureLabel,
   formatFixtureMonthLabel,
   formatMatchDateLong,
   getFixtureMonthKey,
+  isUpcomingFixture,
 } from "@/lib/match-format";
 import {
   loadMatches,
@@ -18,6 +20,17 @@ import {
 import type { Match } from "@/lib/types";
 import EnglandHockeySettings from "./england-hockey-settings";
 import NewFixtureForm from "./new-fixture-form";
+
+const ALL_FIXTURES = "all";
+const UPCOMING_FIXTURES = "upcoming";
+
+function pillClass(active: boolean) {
+  return `rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+    active
+      ? "bg-[var(--accent-primary)] text-white"
+      : "bg-[var(--surface-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+  }`;
+}
 
 export default function FixturesPage() {
   const { activeTeam, canWrite, club } = useTeam();
@@ -45,14 +58,19 @@ export default function FixturesPage() {
     new Set(fixtures.map((match) => getFixtureMonthKey(match.date))),
   ).sort();
   const activeMonthKey =
-    selectedMonthKey && monthKeys.includes(selectedMonthKey)
+    selectedMonthKey === ALL_FIXTURES || selectedMonthKey === UPCOMING_FIXTURES
       ? selectedMonthKey
-      : (monthKeys[0] ?? null);
-  const visibleFixtures = activeMonthKey
-    ? fixtures.filter(
-        (match) => getFixtureMonthKey(match.date) === activeMonthKey,
-      )
-    : fixtures;
+      : selectedMonthKey && monthKeys.includes(selectedMonthKey)
+        ? selectedMonthKey
+        : (monthKeys[0] ?? null);
+  const visibleFixtures =
+    activeMonthKey === UPCOMING_FIXTURES
+      ? fixtures.filter((match) => isUpcomingFixture(match.date))
+      : activeMonthKey && activeMonthKey !== ALL_FIXTURES
+        ? fixtures.filter(
+            (match) => getFixtureMonthKey(match.date) === activeMonthKey,
+          )
+        : fixtures;
 
   function persist(next: Match[]) {
     setMatches(next);
@@ -82,7 +100,7 @@ export default function FixturesPage() {
         </p>
       </div>
 
-      {canWrite && activeTeam && (
+      {isNorthernHockeyAdmin(club.role) && activeTeam && (
         <EnglandHockeySettings
           key={`${club.id}:${activeTeam.id}`}
           teamId={activeTeam.id}
@@ -103,16 +121,26 @@ export default function FixturesPage() {
         ) : (
           <>
             <div className="flex flex-wrap gap-2 border-b border-[var(--border-primary)] bg-[var(--surface-muted)] px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setSelectedMonthKey(ALL_FIXTURES)}
+                className={pillClass(activeMonthKey === ALL_FIXTURES)}
+              >
+                All fixtures
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedMonthKey(UPCOMING_FIXTURES)}
+                className={pillClass(activeMonthKey === UPCOMING_FIXTURES)}
+              >
+                Upcoming fixtures
+              </button>
               {monthKeys.map((monthKey) => (
                 <button
                   key={monthKey}
                   type="button"
                   onClick={() => setSelectedMonthKey(monthKey)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                    monthKey === activeMonthKey
-                      ? "bg-[var(--accent-primary)] text-white"
-                      : "bg-[var(--surface-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                  }`}
+                  className={pillClass(monthKey === activeMonthKey)}
                 >
                   {formatFixtureMonthLabel(monthKey)}
                 </button>
