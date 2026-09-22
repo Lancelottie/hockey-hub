@@ -8,7 +8,7 @@ import { useTeam } from "@/lib/team-context";
 import { loadLineup, loadPlayers, loadTeams, saveLineup, saveTeams, subscribeStorage, fixtureSyncInProgress } from "@/lib/storage";
 import { assignPlayer, BUILTIN_PRESETS, DEFAULT_LINES, generateSlots, lineLabel, playersForSlot, MAX_STARTERS, MAX_SUBS, playerAt, shirtMatches, swapPlayers, validLines, withFormation } from "@/lib/formation";
 import { sectionTeamIds } from "@/lib/team-sections";
-import type { Lineup, Match } from "@/lib/types";
+import type { Lineup, Match, Player, Team } from "@/lib/types";
 import Pitch from "../squad-selection/pitch";
 import PositionPicker from "./position-picker";
 
@@ -31,10 +31,16 @@ export default function FormationEditor({ match }: { match: Match }) {
   const [showAllPlayers, setShowAllPlayers] = useState(false);
   const [loanMode, setLoanMode] = useState(false);
   const [pooledTeamIdsByPlayer, setPooledTeamIdsByPlayer] = useState<Record<string, string[]>>({});
+  const [sectionRoster, setSectionRoster] = useState<{ teams: Team[]; players: Player[] }>({ teams: [], players: [] });
   const [number, setNumber] = useState("");
   const [message, setMessage] = useState("");
   const numberInput = useRef<HTMLInputElement>(null);
-  const teams = loadTeams();
+  const localTeams = loadTeams();
+  // A team-scoped role's snapshot (loadTeams/loadPlayers) only ever contains their own team(s)
+  // — see selectTeams in lib/repository.ts — so sibling section teams are otherwise invisible to
+  // them even though they exist. Fetched separately so borrowing/loaning works for scoped roles
+  // like named captains, not just club-wide admins/managers.
+  const teams = [...localTeams, ...sectionRoster.teams.filter(t => !localTeams.some(lt => lt.id === t.id))];
   const teamNameById = Object.fromEntries(teams.map(t => [t.id, t.name]));
   const loanTeamIds = sectionTeamIds(teams, match.teamId).filter(id => id !== match.teamId);
   useEffect(() => {
@@ -51,7 +57,22 @@ export default function FormationEditor({ match }: { match: Match }) {
       .catch(() => {});
     return () => controller.abort();
   }, [club.id]);
-  const allPlayers = loadPlayers();
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/section-roster?clubId=${encodeURIComponent(club.id)}&teamId=${encodeURIComponent(match.teamId)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(res => res.json())
+      .then(result => {
+        if (controller.signal.aborted) return;
+        setSectionRoster({ teams: result.teams ?? [], players: result.players ?? [] });
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [club.id, match.teamId]);
+  const localPlayers = loadPlayers();
+  const allPlayers = [...localPlayers, ...sectionRoster.players.filter(p => !localPlayers.some(lp => lp.id === p.id))];
   const pooledPlayerIds = new Set(
     allPlayers.filter(p => p.teamId !== match.teamId && (pooledTeamIdsByPlayer[p.id] ?? []).includes(match.teamId)).map(p => p.id),
   );
