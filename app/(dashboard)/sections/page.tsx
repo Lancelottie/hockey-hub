@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Team } from "@/lib/types";
 import { useTeam } from "@/lib/team-context";
@@ -52,22 +53,32 @@ export default function SectionsPage() {
         {SECTION_KEYS.map((key) => {
           const sectionTeams = teamsBySection.get(key) ?? [];
           const eligible = sectionTeams.length > 0;
+          if (eligible)
+            return (
+              <button
+                key={key}
+                type="button"
+                className="section-card"
+                onClick={() => openSection(sectionTeams)}
+              >
+                <strong>{SECTION_LABELS[key]}</strong>
+                <span>
+                  {sectionTeams.length} {sectionTeams.length === 1 ? "team" : "teams"}
+                </span>
+              </button>
+            );
           return (
-            <button
+            <div
               key={key}
-              type="button"
-              className="section-card"
-              disabled={!eligible}
-              title={eligible ? undefined : "Not a member of this section"}
-              onClick={() => openSection(sectionTeams)}
+              className="section-card is-disabled"
+              title="Not a member of this section"
             >
               <strong>{SECTION_LABELS[key]}</strong>
-              <span>
-                {eligible
-                  ? `${sectionTeams.length} ${sectionTeams.length === 1 ? "team" : "teams"}`
-                  : "Not a member of this section"}
-              </span>
-            </button>
+              <span>Not a member of this section</span>
+              <Link href="/request-access" className="section-card-request-link">
+                Request access →
+              </Link>
+            </div>
           );
         })}
       </div>
