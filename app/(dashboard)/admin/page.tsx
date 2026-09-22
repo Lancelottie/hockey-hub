@@ -405,26 +405,28 @@ export default function AdminPage() {
                   )}
                 </p>
                 <p className="text-sm text-[var(--text-secondary)]">{member.email}</p>
-                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+                <ul className="mt-3 space-y-1">
                   {ROLES.map((role) => {
                     const held = member.roles.includes(role);
                     const isSelf = member.userId === userId;
                     const disabled =
                       savingUserId === member.userId || (held && isSelf);
                     return (
-                      <label key={role} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={held}
-                          disabled={disabled}
-                          onChange={() => void toggleRole(member.userId, role, !held)}
-                          className="h-4 w-4 accent-[var(--accent-primary)]"
-                        />
-                        {roleLabel(role)}
-                      </label>
+                      <li key={role}>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={held}
+                            disabled={disabled}
+                            onChange={() => void toggleRole(member.userId, role, !held)}
+                            className="h-4 w-4 accent-[var(--accent-primary)]"
+                          />
+                          {roleLabel(role)}
+                        </label>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
               </li>
             ))}
           </ul>
