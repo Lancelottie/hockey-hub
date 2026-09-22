@@ -12,7 +12,6 @@ const items = [
   { href: "/my-team", label: "My Team" },
   { href: "/squads", label: "Players" },
   { href: "/fixtures", label: "Fixtures" },
-  { href: "/selection", label: "Selection" },
 ];
 export default function Sidebar() {
   const pathname = usePathname();

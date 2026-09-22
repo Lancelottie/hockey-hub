@@ -65,7 +65,7 @@ export default function Home() {
             label: "Selected for next match",
             value: selected,
             icon: ClipboardList,
-            href: next ? `/fixtures/${next.id}` : "/selection",
+            href: next ? `/fixtures/${next.id}` : "/fixtures",
           },
         ].map((stat) => (
           <Link key={stat.label} href={stat.href} className="stat-card">
@@ -133,7 +133,9 @@ export default function Home() {
                   ? `${selected} players selected. Review your lineup before pushback.`
                   : "Create a fixture, then choose your starting XI and substitutes."}
               </p>
-              <Link href="/selection">Open selection →</Link>
+              <Link href={next ? `/fixtures/${next.id}` : "/fixtures"}>
+                {next ? "Open selection →" : "Open fixtures →"}
+              </Link>
             </div>
           </div>
           <div className="notebook-item">

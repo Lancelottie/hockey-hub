@@ -32,9 +32,10 @@ test("protected routes, sign-in and player filtering", async ({
   await expect(
     page.getByRole("heading", { name: "Choose your section" }),
   ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mens" })).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Mens" }),
-  ).toBeDisabled();
+    page.getByText("Not a member of this section").first(),
+  ).toBeVisible();
   await page.screenshot({
     path: "test-results/sections-desktop.png",
     fullPage: true,
@@ -65,7 +66,7 @@ test("protected routes, sign-in and player filtering", async ({
 test("lineup and checklist persistence, with mobile navigation", async ({
   page,
 }) => {
-  await page.goto("/selection");
+  await page.goto("/fixtures/opening-match");
   await page.getByRole("button", { name: "Build formation", exact: true }).click();
   await page.locator('[data-slot="line-0-0"]').click();
   await page.getByLabel("Show all positions", { exact: true }).check();
@@ -113,7 +114,7 @@ test("lineup and checklist persistence, with mobile navigation", async ({
 for (const route of [
   "/squads",
   "/fixtures",
-  "/selection",
+  "/fixtures/opening-match",
   "/squad-selection",
   "/admin",
   "/teams",
@@ -122,7 +123,7 @@ for (const route of [
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(route);
     await expect(page.locator("#main")).toBeVisible();
-    if (route === "/selection")
+    if (route === "/fixtures/opening-match")
       await page.screenshot({
         path: "test-results/lineup-mobile.png",
         fullPage: true,
@@ -234,7 +235,7 @@ test("England Hockey settings import and refresh fixtures without a page reload"
 });
 
 test("formation keyboard workflow, swap, bench, presets and responsive custom slots", async ({ page }) => {
-  await page.goto("/selection");
+  await page.goto("/fixtures/opening-match");
   await page.locator('[data-slot="gk"]').click();
   await expect(page.locator('#lineup-player option[value="sam"]')).toHaveCount(1);
   await expect(page.locator('#lineup-player option[value="jo"]')).toHaveCount(0);

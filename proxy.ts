@@ -16,7 +16,6 @@ export const config = {
     "/squads/:path*",
     "/fixtures/:path*",
     "/squad-selection/:path*",
-    "/selection/:path*",
     "/admin/:path*",
   ],
 };
