@@ -54,10 +54,9 @@ export async function removeMemberRole(userId: string, clubId: string, targetUse
   await requireAdmin(userId, clubId);
   if (targetUserId === userId) throw new AccessError(400, "You cannot remove your own role.");
   const db = getStore();
-  const count = (await db
-    .prepare("SELECT COUNT(*) AS n FROM club_memberships WHERE user_id=? AND club_id=?")
-    .get(targetUserId, clubId)) as { n: number | string };
-  if (Number(count.n) <= 1) throw new AccessError(400, "A member must keep at least one role.");
+  // A member may end up with zero roles for this club (removing their last one revokes their
+  // access to it entirely, same as never having been granted it) — listClubs/requireClub already
+  // handle that state gracefully elsewhere. This is distinct from account suspension.
   await db.prepare("DELETE FROM club_memberships WHERE user_id=? AND club_id=? AND role=?").run(targetUserId, clubId, role);
   // The role's own membership_team_access scope is removed automatically via ON DELETE CASCADE.
   await db

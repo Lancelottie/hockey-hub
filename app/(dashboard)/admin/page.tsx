@@ -386,8 +386,8 @@ export default function AdminPage() {
         <p className="mb-3 text-sm text-[var(--text-secondary)]">
           A member may hold more than one role (e.g. a club admin who is also a team
           captain) and switch which is active from the topbar. You can grant yourself
-          an additional role here, but not remove your own, and a member must always
-          keep at least one role.
+          an additional role here, but not remove your own. Removing someone&apos;s last
+          role removes their access to this club.
         </p>
         {membersLoading ? (
           <p className="text-sm text-[var(--text-secondary)]">Loading members…</p>
@@ -410,8 +410,7 @@ export default function AdminPage() {
                     const held = member.roles.includes(role);
                     const isSelf = member.userId === userId;
                     const disabled =
-                      savingUserId === member.userId ||
-                      (held && (isSelf || member.roles.length === 1));
+                      savingUserId === member.userId || (held && isSelf);
                     return (
                       <label key={role} className="flex items-center gap-2 text-sm">
                         <input
