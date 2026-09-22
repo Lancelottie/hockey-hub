@@ -6,14 +6,14 @@ import { AWAY_COLOR, GOALKEEPER_COLORS, HOME_COLOR } from "@/lib/kit-colors";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTeam } from "@/lib/team-context";
 import { loadLineup, loadPlayers, loadTeams, saveLineup, saveTeams, subscribeStorage, fixtureSyncInProgress } from "@/lib/storage";
-import { assignPlayer, BUILTIN_PRESETS, DEFAULT_LINES, eligiblePlayers, generateSlots, lineLabel, playersForSlot, MAX_STARTERS, MAX_SUBS, playerAt, shirtMatches, swapPlayers, validLines, withFormation } from "@/lib/formation";
+import { assignPlayer, BUILTIN_PRESETS, DEFAULT_LINES, generateSlots, lineLabel, playersForSlot, MAX_STARTERS, MAX_SUBS, playerAt, shirtMatches, swapPlayers, validLines, withFormation } from "@/lib/formation";
 import { sectionTeamIds } from "@/lib/team-sections";
 import type { Lineup, Match } from "@/lib/types";
 import Pitch from "../squad-selection/pitch";
 import PositionPicker from "./position-picker";
 
 export default function FormationEditor({ match }: { match: Match }) {
-  const { canWrite } = useTeam();
+  const { canWrite, club } = useTeam();
   const syncing = useSyncExternalStore(subscribeStorage, fixtureSyncInProgress, () => false);
   const editable = canWrite && !syncing;
   const [lineup, setLineup] = useState(() => loadLineup(match.id));
@@ -29,13 +29,38 @@ export default function FormationEditor({ match }: { match: Match }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [swapFrom, setSwapFrom] = useState<string | null>(null);
   const [showAllPlayers, setShowAllPlayers] = useState(false);
+  const [loanMode, setLoanMode] = useState(false);
+  const [pooledTeamIdsByPlayer, setPooledTeamIdsByPlayer] = useState<Record<string, string[]>>({});
   const [number, setNumber] = useState("");
   const [message, setMessage] = useState("");
   const numberInput = useRef<HTMLInputElement>(null);
   const teams = loadTeams();
   const teamNameById = Object.fromEntries(teams.map(t => [t.id, t.name]));
-  const borrowTeamIds = sectionTeamIds(teams, match.teamId).filter(id => id !== match.teamId);
-  const players = eligiblePlayers(loadPlayers(), match.teamId, undefined, undefined, borrowTeamIds);
+  const loanTeamIds = sectionTeamIds(teams, match.teamId).filter(id => id !== match.teamId);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/player-teams?clubId=${encodeURIComponent(club.id)}`, { signal: controller.signal, cache: "no-store" })
+      .then(res => res.json())
+      .then(result => {
+        if (controller.signal.aborted) return;
+        const next: Record<string, string[]> = {};
+        for (const m of result.memberships as { playerId: string; teamId: string }[])
+          next[m.playerId] = [...(next[m.playerId] ?? []), m.teamId];
+        setPooledTeamIdsByPlayer(next);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [club.id]);
+  const allPlayers = loadPlayers();
+  const pooledPlayerIds = new Set(
+    allPlayers.filter(p => p.teamId !== match.teamId && (pooledTeamIdsByPlayer[p.id] ?? []).includes(match.teamId)).map(p => p.id),
+  );
+  // Home team players and players explicitly pooled to this team (Squads > Additional teams) are always
+  // available, no extra step. Loaning in (below) is for someone not already pre-arranged that way.
+  const loanPool = allPlayers.filter(p => loanTeamIds.includes(p.teamId) && !pooledPlayerIds.has(p.id));
+  const players = allPlayers.filter(
+    p => p.teamId === match.teamId || pooledPlayerIds.has(p.id) || (loanMode && loanTeamIds.includes(p.teamId)),
+  );
   const playerLabel = (p: { id: string; name: string; number: number | null; teamId: string }) =>
     `${p.name} · #${p.number ?? "—"}${p.teamId !== match.teamId ? ` (${teamNameById[p.teamId] ?? "other team"})` : ""}`;
   const formation = lineup.formation;
@@ -76,7 +101,7 @@ export default function FormationEditor({ match }: { match: Match }) {
     const emptySlots = nextSlots.filter(slot => !assignments[slot.id]);
     remaining.forEach((id, i) => { assignments[emptySlots[i].id] = id; });
     persist(withFormation(lineup, { lines: nextLines, name: nextName, status: "draft", assignments }));
-    setLines(nextLines); setName(nextName); setSelected(null); setSwapFrom(null); setShowAllPlayers(false);
+    setLines(nextLines); setName(nextName); setSelected(null); setSwapFrom(null); setShowAllPlayers(false); setLoanMode(false);
     setMessage(remaining.length ? "Formation built. Some existing players are outside their recorded position; review their slots." : "Formation built. Select a position to start.");
     return true;
   }
@@ -86,19 +111,37 @@ export default function FormationEditor({ match }: { match: Match }) {
       persist(swapPlayers(lineup, swapFrom, slot));
       setSwapFrom(null); setMessage("Positions exchanged."); return;
     }
-    setSelected(slot); setShowAllPlayers(false); setNumber(""); setMessage("");
+    setSelected(slot); setShowAllPlayers(false); setLoanMode(false); setNumber(""); setMessage("");
     requestAnimationFrame(() => numberInput.current?.focus());
   }
   function assign(id: string) {
     if (!selected || !editable || !positionPlayers.some(p => p.id === id)) return;
     try {
+      const assignedPlayer = players.find(p => p.id === id);
       const next = assignPlayer(lineup, selected, id);
       persist(next);
       const index = allSlots.findIndex(s => s.id === selected);
       const following = [...allSlots.slice(index + 1), ...allSlots.slice(0, index)].find(s => !playerAt(next, s.id));
       if (following) { setSelected(following.id); setShowAllPlayers(false); }
-      setNumber(""); setMessage(`${players.find(p => p.id === id)?.name} assigned.`);
+      setNumber(""); setMessage(`${assignedPlayer?.name} assigned.`);
       requestAnimationFrame(() => numberInput.current?.focus());
+      if (assignedPlayer && loanPool.some(p => p.id === assignedPlayer.id)) {
+        void fetch("/api/player-loans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clubId: club.id,
+            playerId: assignedPlayer.id,
+            playerName: assignedPlayer.name,
+            fromTeamId: assignedPlayer.teamId,
+            fromTeamName: teamNameById[assignedPlayer.teamId] ?? "another team",
+            toTeamId: match.teamId,
+            toTeamName: teamNameById[match.teamId] ?? "this team",
+            matchId: match.id,
+            opponent: match.opponent,
+          }),
+        }).catch(() => {});
+      }
     } catch (error) { setMessage((error as Error).message); }
   }
   function savePreset() {
@@ -174,13 +217,14 @@ export default function FormationEditor({ match }: { match: Match }) {
       <div className="formation-selection-panel space-y-3">
         <h3 className="font-semibold">Choose your players</h3>
         <p className="text-sm">{lineup.placements.length}/{slots.length} starters assigned. Team players · fixture availability has not been recorded.</p>
-        {borrowTeamIds.length > 0 && <p className="text-sm">You can also temporarily assign players from {borrowTeamIds.map(id => teamNameById[id]).filter(Boolean).join(", ")} for this fixture only — marked with * on the pitch.</p>}
+        {loanTeamIds.length > 0 && <p className="text-sm">Players pooled to this team (Squads → Additional teams) are included automatically. To bring in someone else from {loanTeamIds.map(id => teamNameById[id]).filter(Boolean).join(", ")} just for this fixture, use “Loan a player” below — marked with * on the pitch, and the player’s team and your admins are notified.</p>}
         {editable && <Link href="/squads" className="block text-sm underline">Manage team players</Link>}
         {editable && <p className="text-sm">Select a pitch or bench position, type a shirt number and press Enter. The next empty position is selected automatically. Editing a published team returns it to draft.</p>}
         {swapFrom && <div role="status">Select a destination to move or swap.<button className="ml-2 underline" onClick={() => setSwapFrom(null)}>Cancel swap</button></div>}
         {selected && editable && <PositionPicker slotId={selected} onClose={() => setSelected(null)}>
           <h3 className="font-semibold">{allSlots.find(s => s.id === selected)?.label}</h3>
           {slots.some(s => s.id === selected) && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showAllPlayers} onChange={e => { setShowAllPlayers(e.target.checked); setMessage(""); }} />Show all positions</label>}
+          {loanPool.length > 0 && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={loanMode} onChange={e => { setLoanMode(e.target.checked); setMessage(""); }} />Loan a player from {loanTeamIds.map(id => teamNameById[id]).filter(Boolean).join(", ")}</label>}
           {!positionPlayers.length && <p className="text-sm">No team players are recorded in this position. Update a player’s position or enable Show all positions.</p>}
           {selectedPlayer && <p>{playerLabel(selectedPlayer)}</p>}
           <form onSubmit={e => { e.preventDefault(); if (matches.length === 1) assign(matches[0].id); else setMessage(matches.length ? "Multiple players have this number. Choose a matching player below." : "No matching player in this position has that shirt number. Enable Show all positions to select outside their recorded role."); }}>

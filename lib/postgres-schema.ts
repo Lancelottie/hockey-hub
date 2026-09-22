@@ -124,6 +124,16 @@ export const postgresSchema = `
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','done')),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS player_loans (
+      id TEXT PRIMARY KEY,
+      club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+      player_id TEXT NOT NULL, player_name TEXT NOT NULL,
+      from_team_id TEXT NOT NULL, from_team_name TEXT NOT NULL,
+      to_team_id TEXT NOT NULL, to_team_name TEXT NOT NULL,
+      match_id TEXT NOT NULL, opponent TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','acknowledged')),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE TABLE IF NOT EXISTS data_migrations (
       id TEXT PRIMARY KEY, source_digest TEXT NOT NULL, counts TEXT NOT NULL,
       completed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP

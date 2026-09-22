@@ -27,6 +27,14 @@ type AccessRequest = {
   requestedLevels: AccessRequestLevel[];
   createdAt: string;
 };
+type PlayerLoan = {
+  id: string;
+  playerName: string;
+  fromTeamName: string;
+  toTeamName: string;
+  opponent: string;
+  createdAt: string;
+};
 export default function AdminPage() {
   const { club, teams, userId } = useTeam();
   const [name, setName] = useState("");
@@ -39,6 +47,46 @@ export default function AdminPage() {
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
   const [accessRequestsError, setAccessRequestsError] = useState("");
   const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null);
+  const [playerLoans, setPlayerLoans] = useState<PlayerLoan[]>([]);
+  const [playerLoansError, setPlayerLoansError] = useState("");
+  const [acknowledgingLoanId, setAcknowledgingLoanId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!canAdmin(club.role)) return;
+    const controller = new AbortController();
+    fetch(`/api/player-loans?clubId=${encodeURIComponent(club.id)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        if (controller.signal.aborted) return;
+        setPlayerLoans(result.loans);
+      })
+      .catch((e) => {
+        if (!controller.signal.aborted)
+          setPlayerLoansError(e instanceof Error ? e.message : "Unable to load player loans.");
+      });
+    return () => controller.abort();
+  }, [club.id, club.role]);
+  async function acknowledgeLoan(id: string) {
+    setAcknowledgingLoanId(id);
+    setPlayerLoansError("");
+    try {
+      const response = await fetch("/api/player-loans", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clubId: club.id, id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Unable to update the loan notice.");
+      setPlayerLoans(result.loans);
+    } catch (e) {
+      setPlayerLoansError(e instanceof Error ? e.message : "Unable to update the loan notice.");
+    } finally {
+      setAcknowledgingLoanId(null);
+    }
+  }
   useEffect(() => {
     if (!canAdmin(club.role)) return;
     const controller = new AbortController();
@@ -277,6 +325,45 @@ export default function AdminPage() {
           {accessRequestsError && (
             <p role="alert" className="mt-3 text-sm text-[var(--status-critical)]">
               {accessRequestsError}
+            </p>
+          )}
+        </section>
+      )}
+      {playerLoans.length > 0 && (
+        <section className="rounded-[20px] border border-[var(--status-warning)] bg-[var(--status-warning-light)] p-5">
+          <h2 className="text-lg font-bold text-[var(--status-warning)]">
+            Player loans
+          </h2>
+          <p className="mt-1 text-sm text-[var(--status-warning)]">
+            These players were borrowed from another team for a fixture, outside any pre-arranged pooling.
+          </p>
+          <ul className="mt-4 space-y-3">
+            {playerLoans.map((loan) => (
+              <li
+                key={loan.id}
+                className="rounded-lg bg-[var(--surface-primary)] p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-[var(--text-primary)]">
+                    {loan.playerName} · {loan.fromTeamName} → {loan.toTeamName}
+                  </p>
+                  <button
+                    className="text-sm underline disabled:opacity-55"
+                    disabled={acknowledgingLoanId === loan.id}
+                    onClick={() => void acknowledgeLoan(loan.id)}
+                  >
+                    Acknowledge →
+                  </button>
+                </div>
+                <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                  For the fixture vs {loan.opponent}
+                </p>
+              </li>
+            ))}
+          </ul>
+          {playerLoansError && (
+            <p role="alert" className="mt-3 text-sm text-[var(--status-critical)]">
+              {playerLoansError}
             </p>
           )}
         </section>
