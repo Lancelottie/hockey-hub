@@ -32,13 +32,24 @@ export const postgresSchema = `
     ALTER TABLE membership_team_access ALTER COLUMN role SET NOT NULL;
     ALTER TABLE membership_team_access DROP CONSTRAINT IF EXISTS membership_team_access_role_check;
     ALTER TABLE membership_team_access ADD CONSTRAINT membership_team_access_role_check CHECK(role IN (${roleSqlValues}));
-    ALTER TABLE membership_team_access DROP CONSTRAINT IF EXISTS membership_team_access_user_id_club_id_fkey;
-    ALTER TABLE membership_team_access DROP CONSTRAINT IF EXISTS membership_team_access_pkey;
-    ALTER TABLE club_memberships DROP CONSTRAINT IF EXISTS club_memberships_pkey;
-    ALTER TABLE club_memberships ADD CONSTRAINT club_memberships_pkey PRIMARY KEY(user_id,club_id,role);
-    ALTER TABLE membership_team_access ADD CONSTRAINT membership_team_access_pkey PRIMARY KEY(user_id,club_id,role);
-    ALTER TABLE membership_team_access ADD CONSTRAINT membership_team_access_user_id_club_id_fkey
-      FOREIGN KEY(user_id,club_id,role) REFERENCES club_memberships(user_id,club_id,role) ON DELETE CASCADE;
+    -- Re-running this script is otherwise a no-op, but once active_roles/membership_team_access's
+    -- foreign keys already depend on the widened club_memberships_pkey, unconditionally dropping and
+    -- recreating it fails with "other objects depend on it". Only widen it the first time it's needed.
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'club_memberships'::regclass AND contype = 'p' AND array_length(conkey, 1) = 3
+      ) THEN
+        ALTER TABLE membership_team_access DROP CONSTRAINT IF EXISTS membership_team_access_user_id_club_id_fkey;
+        ALTER TABLE membership_team_access DROP CONSTRAINT IF EXISTS membership_team_access_pkey;
+        ALTER TABLE club_memberships DROP CONSTRAINT IF EXISTS club_memberships_pkey;
+        ALTER TABLE club_memberships ADD CONSTRAINT club_memberships_pkey PRIMARY KEY(user_id,club_id,role);
+        ALTER TABLE membership_team_access ADD CONSTRAINT membership_team_access_pkey PRIMARY KEY(user_id,club_id,role);
+        ALTER TABLE membership_team_access ADD CONSTRAINT membership_team_access_user_id_club_id_fkey
+          FOREIGN KEY(user_id,club_id,role) REFERENCES club_memberships(user_id,club_id,role) ON DELETE CASCADE;
+      END IF;
+    END $$;
     CREATE TABLE IF NOT EXISTS active_roles (
       user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
       club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
