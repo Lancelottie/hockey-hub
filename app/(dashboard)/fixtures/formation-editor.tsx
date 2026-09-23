@@ -11,6 +11,7 @@ import { sectionTeamIds } from "@/lib/team-sections";
 import type { Lineup, Match, Player, Team } from "@/lib/types";
 import Pitch from "../squad-selection/pitch";
 import PositionPicker from "./position-picker";
+import SaveLineupImage from "./save-lineup-image";
 
 export default function FormationEditor({ match }: { match: Match }) {
   const { canWrite, club } = useTeam();
@@ -191,10 +192,15 @@ export default function FormationEditor({ match }: { match: Match }) {
       <div><h2 className="text-xl font-semibold">Team selection · {match.opponent}</h2>
         <p className="text-sm">{formation ? `${formation.name || formation.lines.join("-")} · ${formation.status === "draft" ? "Draft — visible to managers only" : "Published"}` : canWrite ? "Choose your formation" : "No published formation yet."}</p>
       </div>
-      {editable && formation && <button className="primary-button" disabled={slots.length !== MAX_STARTERS || lineup.placements.length !== slots.length}
-        onClick={() => { persist(withFormation(lineup, { ...formation, status: formation.status === "published" ? "draft" : "published" })); setMessage(""); }}>
-        {formation.status === "published" ? "Unpublish team" : "Publish team"}
-      </button>}
+      <div className="flex flex-wrap items-center gap-3">
+        {formation?.status === "published" && (
+          <SaveLineupImage teamName={teamNameById[match.teamId] ?? "Team"} match={match} formation={formation} lineup={lineup} players={players} />
+        )}
+        {editable && formation && <button className="primary-button" disabled={slots.length !== MAX_STARTERS || lineup.placements.length !== slots.length}
+          onClick={() => { persist(withFormation(lineup, { ...formation, status: formation.status === "published" ? "draft" : "published" })); setMessage(""); }}>
+          {formation.status === "published" ? "Unpublish team" : "Publish team"}
+        </button>}
+      </div>
     </div>
     {editable && <details open={!formation} className="rounded-xl border border-[var(--border-primary)] p-3">
       <summary className="cursor-pointer font-semibold">Formation builder</summary>
