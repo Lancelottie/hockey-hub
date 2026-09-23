@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getActiveSession } from "@/lib/session";
 import { AccessError } from "@/lib/repository";
-import { deleteTeamNotice, listTeamNotices, postTeamNotice } from "@/lib/team-notices";
+import { deleteTeamDiscussionReply, listTeamDiscussions, postTeamDiscussionReply } from "@/lib/team-discussions";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 const id = z
@@ -9,14 +9,16 @@ const id = z
   .min(1)
   .max(100)
   .regex(/^[a-zA-Z0-9_-]+$/);
-const postBody = z.object({ clubId: id, teamId: id, body: z.string().trim().min(1).max(2000) }).strict();
-const deleteBody = z.object({ clubId: id, teamId: id, id }).strict();
+const postBody = z
+  .object({ clubId: id, teamId: id, discussionId: id, body: z.string().trim().min(1).max(2000) })
+  .strict();
+const deleteBody = z.object({ clubId: id, teamId: id, discussionId: id, id }).strict();
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { "Cache-Control": "private, no-store" } });
 function failure(error: unknown) {
   if (error instanceof AccessError) return json({ error: error.message }, error.status);
-  console.error("team_notice_request_failed");
-  return json({ error: "The notice board could not be loaded or saved." }, 500);
+  console.error("team_discussion_reply_request_failed");
+  return json({ error: "The reply could not be saved." }, 500);
 }
 function requireSameOrigin(request: Request) {
   if (
@@ -48,19 +50,6 @@ async function readJsonBody(request: Request, limit: number) {
     throw new AccessError(400, "Invalid JSON.");
   }
 }
-export async function GET(request: Request) {
-  try {
-    const session = await getActiveSession(request.headers);
-    if (!session) return json({ error: "Sign in to continue." }, 401);
-    const url = new URL(request.url);
-    const clubId = id.safeParse(url.searchParams.get("clubId"));
-    const teamId = id.safeParse(url.searchParams.get("teamId"));
-    if (!clubId.success || !teamId.success) return json({ error: "Choose a club and team." }, 400);
-    return json({ notices: (await listTeamNotices(session.user.id, clubId.data, teamId.data)) });
-  } catch (error) {
-    return failure(error);
-  }
-}
 export async function POST(request: Request) {
   try {
     requireSameOrigin(request);
@@ -68,10 +57,10 @@ export async function POST(request: Request) {
     if (!session) return json({ error: "Sign in to continue." }, 401);
     const raw = await readJsonBody(request, 4096);
     const parsed = postBody.safeParse(raw);
-    if (!parsed.success) return json({ error: "Write something before posting." }, 400);
-    const { clubId, teamId, body } = parsed.data;
-    await postTeamNotice(session.user.id, clubId, teamId, session.user.name, body);
-    return json({ notices: (await listTeamNotices(session.user.id, clubId, teamId)) });
+    if (!parsed.success) return json({ error: "Write something before replying." }, 400);
+    const { clubId, teamId, discussionId, body } = parsed.data;
+    await postTeamDiscussionReply(session.user.id, clubId, teamId, discussionId, session.user.name, body);
+    return json({ discussions: (await listTeamDiscussions(session.user.id, clubId, teamId)) });
   } catch (error) {
     return failure(error);
   }
@@ -83,10 +72,10 @@ export async function DELETE(request: Request) {
     if (!session) return json({ error: "Sign in to continue." }, 401);
     const raw = await readJsonBody(request, 4096);
     const parsed = deleteBody.safeParse(raw);
-    if (!parsed.success) return json({ error: "Choose an existing notice." }, 400);
-    const { clubId, teamId, id: noticeId } = parsed.data;
-    await deleteTeamNotice(session.user.id, clubId, teamId, noticeId);
-    return json({ notices: (await listTeamNotices(session.user.id, clubId, teamId)) });
+    if (!parsed.success) return json({ error: "Choose an existing reply." }, 400);
+    const { clubId, teamId, discussionId, id: replyId } = parsed.data;
+    await deleteTeamDiscussionReply(session.user.id, clubId, teamId, discussionId, replyId);
+    return json({ discussions: (await listTeamDiscussions(session.user.id, clubId, teamId)) });
   } catch (error) {
     return failure(error);
   }

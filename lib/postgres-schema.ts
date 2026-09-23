@@ -137,13 +137,20 @@ export const postgresSchema = `
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','acknowledged')),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE TABLE IF NOT EXISTS team_notices (
+    CREATE TABLE IF NOT EXISTS team_discussions (
       id TEXT PRIMARY KEY,
       club_id TEXT NOT NULL, team_id TEXT NOT NULL,
       author_id TEXT NOT NULL, author_name TEXT NOT NULL,
       body TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(club_id,team_id) REFERENCES teams(club_id,id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS team_discussion_replies (
+      id TEXT PRIMARY KEY,
+      discussion_id TEXT NOT NULL REFERENCES team_discussions(id) ON DELETE CASCADE,
+      author_id TEXT NOT NULL, author_name TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS data_migrations (
       id TEXT PRIMARY KEY, source_digest TEXT NOT NULL, counts TEXT NOT NULL,

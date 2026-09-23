@@ -5,7 +5,7 @@ import { ArrowUpRight, CalendarDays, Users, ClipboardList } from "lucide-react";
 import { useTeam } from "@/lib/team-context";
 import { loadPlayers, loadMatches, loadLineup } from "@/lib/storage";
 import { formatMatchDateLong } from "@/lib/match-format";
-import NoticeBoard from "./notice-board";
+import DiscussionBoard from "./discussion-board";
 type PlayerLoan = {
   id: string;
   playerName: string;
@@ -14,7 +14,7 @@ type PlayerLoan = {
   opponent: string;
 };
 export default function Home() {
-  const { activeTeam, club, canWrite } = useTeam();
+  const { activeTeam, club, canWrite, userId } = useTeam();
   const [playerLoans, setPlayerLoans] = useState<PlayerLoan[]>([]);
   const [acknowledgingLoanId, setAcknowledgingLoanId] = useState<string | null>(null);
   useEffect(() => {
@@ -201,7 +201,7 @@ export default function Home() {
         </section>
       </div>
       {activeTeam && (
-        <NoticeBoard clubId={club.id} teamId={activeTeam.id} canPost={canWrite} />
+        <DiscussionBoard clubId={club.id} teamId={activeTeam.id} currentUserId={userId} canManage={canWrite} />
       )}
     </div>
   );
