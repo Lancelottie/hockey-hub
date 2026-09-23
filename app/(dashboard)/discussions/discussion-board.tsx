@@ -30,8 +30,9 @@ export default function DiscussionBoard({
 }) {
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
   const [loading, setLoading] = useState(true);
-  const [drafts, setDrafts] = useState<Record<Section, string>>({ ladies: "", mens: "", juniors: "" });
-  const [postingSection, setPostingSection] = useState<Section | null>(null);
+  const [draft, setDraft] = useState("");
+  const [selectedSection, setSelectedSection] = useState<Section | null>(null);
+  const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [postingReplyTo, setPostingReplyTo] = useState<string | null>(null);
@@ -57,26 +58,25 @@ export default function DiscussionBoard({
   }, [clubId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  async function postDiscussion(event: FormEvent, section: Section) {
+  async function postDiscussion(event: FormEvent) {
     event.preventDefault();
-    const body = drafts[section];
-    if (!body.trim()) return;
-    setPostingSection(section);
+    if (!draft.trim() || !selectedSection) return;
+    setPosting(true);
     setError("");
     try {
       const response = await fetch("/api/club-discussions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clubId, section, body }),
+        body: JSON.stringify({ clubId, section: selectedSection, body: draft }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Unable to post.");
       setDiscussions(result.discussions);
-      setDrafts((current) => ({ ...current, [section]: "" }));
+      setDraft("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to post.");
     } finally {
-      setPostingSection(null);
+      setPosting(false);
     }
   }
 
@@ -148,39 +148,45 @@ export default function DiscussionBoard({
       <p className="mt-1 text-sm text-[var(--text-secondary)]">
         Open to the whole club — post or reply in any section, whichever team you&apos;re on.
       </p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        {SECTIONS.map((section) => {
-          const meta = SECTION_META[section];
-          return (
-            <form
-              key={section}
-              onSubmit={(event) => void postDiscussion(event, section)}
-              className="space-y-2 rounded-lg border-2 p-3"
-              style={{ borderColor: meta.border, background: meta.bg }}
-            >
-              <label className="text-sm font-semibold" style={{ color: meta.text }} htmlFor={`discussion-draft-${section}`}>
-                {meta.label}
-              </label>
-              <textarea
-                id={`discussion-draft-${section}`}
-                className="w-full rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] p-2 text-sm"
-                rows={3}
-                maxLength={2000}
-                placeholder={`Raise a point for ${meta.label}…`}
-                value={drafts[section]}
-                onChange={(e) => setDrafts((current) => ({ ...current, [section]: e.target.value }))}
-              />
+      <form onSubmit={postDiscussion} className="mt-4 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {SECTIONS.map((section) => {
+            const meta = SECTION_META[section];
+            const active = selectedSection === section;
+            return (
               <button
-                className="rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-55"
-                style={{ background: meta.button }}
-                disabled={postingSection === section || !drafts[section].trim()}
+                key={section}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setSelectedSection(section)}
+                className="rounded-full px-3 py-1.5 text-sm font-semibold transition-colors"
+                style={
+                  active
+                    ? { background: meta.button, borderStyle: "solid", borderWidth: 1, borderColor: meta.button, color: "#fff" }
+                    : { background: "transparent", borderStyle: "solid", borderWidth: 1, borderColor: meta.border, color: meta.text }
+                }
               >
-                {postingSection === section ? "Posting…" : "Post"}
+                {meta.label}
               </button>
-            </form>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+        <label className="sr-only" htmlFor="discussion-draft">
+          Start a discussion
+        </label>
+        <textarea
+          id="discussion-draft"
+          className="w-full rounded-lg border border-[var(--border-primary)] p-3 text-sm"
+          rows={3}
+          maxLength={2000}
+          placeholder={selectedSection ? `Raise a point for ${SECTION_META[selectedSection].label}…` : "Choose a section above, then write your post…"}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        <button className="primary-button" disabled={posting || !draft.trim() || !selectedSection}>
+          {posting ? "Posting…" : "Post"}
+        </button>
+      </form>
       {error && (
         <p role="alert" className="mt-3 text-sm text-[var(--status-critical)]">
           {error}
