@@ -81,7 +81,8 @@ export default function CreateAccountModal({
             <h2 className="text-xl font-bold">Account created</h2>
             <p className="text-sm text-[var(--text-secondary)]">
               Share this password with {name} some other way — there&apos;s no email sending set
-              up, and it won&apos;t be shown again.
+              up, and it won&apos;t be shown again. They&apos;ll be asked to set their own
+              password the first time they sign in.
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 overflow-x-auto rounded-lg border border-[var(--border-primary)] bg-[var(--surface-muted)] px-3 py-2 text-sm">

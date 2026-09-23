@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getActiveSession } from "@/lib/session";
+import { getActiveSession, requiresPasswordChange } from "@/lib/session";
 import { TeamProvider } from "@/lib/team-context";
 import Sidebar from "./sidebar";
 import Topbar from "./topbar";
@@ -10,7 +10,9 @@ export default async function DashboardLayout({
 }: {
   children: ReactNode;
 }) {
-  if (!(await getActiveSession(await headers()))) redirect("/login");
+  const session = await getActiveSession(await headers());
+  if (!session) redirect("/login");
+  if (await requiresPasswordChange(session.user.id)) redirect("/change-password");
   return (
     <TeamProvider>
       <a className="skip-link" href="#main">

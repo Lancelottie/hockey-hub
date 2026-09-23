@@ -10,7 +10,8 @@ import { getDb, migrateApp } from "../lib/db";
 import { AccessError } from "../lib/repository";
 import { listMembers } from "../lib/members";
 import { submitAccessRequest, listAccessRequests } from "../lib/access-requests";
-import { createMemberAccount } from "../lib/account-provisioning";
+import { clearMustChangePassword, createMemberAccount } from "../lib/account-provisioning";
+import { requiresPasswordChange } from "../lib/session";
 
 const dir = mkdtempSync(join(tmpdir(), "cocaptain-account-provisioning-"));
 process.env.DATABASE_PATH = join(dir, "test.sqlite");
@@ -60,11 +61,18 @@ test("account provisioning: admin-only, grants the chosen roles, resolves the tr
       accessRequestId: request.id,
     });
     assert.ok(result.userId);
-    assert.ok(result.password.length >= 12);
+    assert.equal(result.password.length, 12);
     const members = await listMembers(users.club_admin, "club");
     const created = members.find((m) => m.userId === result.userId);
     assert.deepEqual(created?.roles.sort(), ["coach", "read_only"]);
     assert.deepEqual(await listAccessRequests(users.club_admin, "club"), []);
+  });
+
+  await t.test("the new account must change its password until it does", async () => {
+    const [{ userId: joId }] = (await listMembers(users.club_admin, "club")).filter((m) => m.email === "jo@example.test");
+    assert.equal(await requiresPasswordChange(joId), true);
+    await clearMustChangePassword(joId);
+    assert.equal(await requiresPasswordChange(joId), false);
   });
 
   await t.test("rejects an email that's already registered", async () => {

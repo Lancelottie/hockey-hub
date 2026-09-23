@@ -5,6 +5,9 @@ export const postgresSchema = `
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended')),
       last_login TEXT
     );
+    ALTER TABLE app_accounts ADD COLUMN IF NOT EXISTS must_change_password TEXT NOT NULL DEFAULT 'false';
+    ALTER TABLE app_accounts DROP CONSTRAINT IF EXISTS app_accounts_must_change_password_check;
+    ALTER TABLE app_accounts ADD CONSTRAINT app_accounts_must_change_password_check CHECK(must_change_password IN ('true','false'));
     CREATE TABLE IF NOT EXISTS clubs (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
