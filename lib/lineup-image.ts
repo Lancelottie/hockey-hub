@@ -14,6 +14,11 @@ const PITCH_VIEWBOX_H = PITCH_ART_W;
 const PITCH_H = Math.round((CANVAS_W * PITCH_VIEWBOX_H) / PITCH_VIEWBOX_W);
 const SUB_ROW_H = 150;
 const FONT = "system-ui, -apple-system, 'Segoe UI', sans-serif";
+// Same glyph as lucide-react's <Shirt> icon (used on the pitch elsewhere in the app), on its
+// native 24x24 viewBox so the drawn shirts match rather than falling back to plain circles.
+const SHIRT_PATH = new Path2D(
+  "M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z",
+);
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -36,19 +41,29 @@ function drawShirt(
 ) {
   const kit = player?.goalkeeperKit ?? "yellow";
   const color = isGoalkeeper ? GOALKEEPER_COLORS[kit] : isHome ? HOME_COLOR : AWAY_COLOR;
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = "rgba(0,0,0,0.28)";
-  ctx.stroke();
+  const bottom = cy + radius * 0.92; // ~ the icon's bottom hem, for anchoring the name below it
 
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale((radius * 2) / 24, (radius * 2) / 24);
+  ctx.translate(-12, -12);
+  ctx.fillStyle = color;
+  ctx.fill(SHIRT_PATH);
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.stroke(SHIRT_PATH);
+  ctx.restore();
+
+  // The torso — where the number sits — is the narrower lower two-thirds of the icon, not
+  // the full box: offset up from centre and undersize the digits so they stay inside it.
+  const numberCx = cx - radius * 0.06;
+  const numberCy = cy + radius * 0.28;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = isGoalkeeper && kit === "yellow" ? "#142b3f" : "#ffffff";
-  ctx.font = `700 ${Math.round(radius * 0.72)}px ${FONT}`;
-  ctx.fillText(player ? String(player.number ?? "•") : "+", cx, cy + radius * 0.04);
+  ctx.font = `700 ${Math.round(radius * 0.5)}px ${FONT}`;
+  ctx.fillText(player ? String(player.number ?? "•") : "+", numberCx, numberCy);
 
   if (player) {
     const borrowed = player.teamId !== ownTeamId;
@@ -57,9 +72,9 @@ function drawShirt(
     ctx.lineJoin = "round";
     ctx.lineWidth = Math.round(radius * 0.18);
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
-    ctx.strokeText(label, cx, cy + radius + radius * 0.62);
+    ctx.strokeText(label, cx, bottom + radius * 0.5);
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(label, cx, cy + radius + radius * 0.62);
+    ctx.fillText(label, cx, bottom + radius * 0.5);
   }
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
