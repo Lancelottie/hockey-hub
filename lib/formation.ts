@@ -35,16 +35,21 @@ export function playersForSlot(players: Player[], slots: FormationSlot[], slotId
   return role ? players.filter(player => player.position === role) : players;
 }
 
-export function generateSlots(lines: number[]): FormationSlot[] {
+export function generateSlots(lines: number[], presetName?: string): FormationSlot[] {
   if (!validLines(lines)) throw new Error("Use 1–10 lines with 1–10 outfield players in total.");
   return [
-    ...lines.flatMap((count, line) => Array.from({ length: count }, (_, position) => ({
-      id: `line-${line}-${position}`,
-      label: `${lineLabel(line, lines.length)}, position ${position + 1}`,
-      role: lineRole(line, lines.length),
-      x: 5 + 90 * (position + 1) / (count + 1),
-      y: lines.length === 1 ? 45 : 74 - 60 * line / (lines.length - 1),
-    }))),
+    ...lines.flatMap((count, line) => Array.from({ length: count }, (_, position) => {
+      const x = 5 + 90 * (position + 1) / (count + 1);
+      // Legend's third line (the two wide midfielders) plays on the wing, twice as far apart as the default spacing.
+      const wide = presetName === "Legend" && line === 2;
+      return {
+        id: `line-${line}-${position}`,
+        label: `${lineLabel(line, lines.length)}, position ${position + 1}`,
+        role: lineRole(line, lines.length),
+        x: wide ? 50 + (x - 50) * 2 : x,
+        y: lines.length === 1 ? 45 : 74 - 60 * line / (lines.length - 1),
+      };
+    })),
     { id: "gk", label: "Goalkeeper", role: "Goalkeeper", x: 50, y: 89 },
   ];
 }
@@ -52,7 +57,7 @@ export function generateSlots(lines: number[]): FormationSlot[] {
 export function withFormation(lineup: Lineup, formation: Formation): Lineup {
   return {
     ...lineup, formation,
-    placements: generateSlots(formation.lines).flatMap(slot => {
+    placements: generateSlots(formation.lines, formation.name).flatMap(slot => {
       const playerId = formation.assignments[slot.id];
       return playerId ? [{ playerId, x: slot.x, y: slot.y }] : [];
     }),
@@ -72,7 +77,7 @@ export function playerAt(lineup: Lineup, slot: string): string | undefined {
 }
 export function assignPlayer(lineup: Lineup, slot: string, playerId?: string): Lineup {
   if (!lineup.formation) throw new Error("Build a formation first.");
-  const slots = [...generateSlots(lineup.formation.lines).map(s => s.id), ...Array.from({ length: MAX_SUBS }, (_, i) => `sub-${i}`)];
+  const slots = [...generateSlots(lineup.formation.lines, lineup.formation.name).map(s => s.id), ...Array.from({ length: MAX_SUBS }, (_, i) => `sub-${i}`)];
   if (!slots.includes(slot)) throw new Error("Unknown position.");
   const occupied = playerId && slots.find(s => s !== slot && playerAt(lineup, s) === playerId);
   if (occupied) throw new Error(`Player is already selected at ${occupied}. Use Move / swap.`);

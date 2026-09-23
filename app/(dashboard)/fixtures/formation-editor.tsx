@@ -85,7 +85,7 @@ export default function FormationEditor({ match }: { match: Match }) {
   const playerLabel = (p: { id: string; name: string; number: number | null; teamId: string }) =>
     `${p.name} · #${p.number ?? "—"}${p.teamId !== match.teamId ? ` (${teamNameById[p.teamId] ?? "other team"})` : ""}`;
   const formation = lineup.formation;
-  const slots = formation ? generateSlots(formation.lines) : [];
+  const slots = formation ? generateSlots(formation.lines, formation.name) : [];
   const allSlots = [...slots, ...Array.from({ length: MAX_SUBS }, (_, i) => ({ id: `sub-${i}`, label: `Substitute ${i + 1}`, x: 0, y: 0 }))];
   const selectedPlayer = players.find(p => p.id === (selected ? playerAt(lineup, selected) : undefined));
   const positionPlayers = showAllPlayers ? players : playersForSlot(players, slots, selected);
