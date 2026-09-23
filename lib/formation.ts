@@ -34,6 +34,11 @@ export function playersForSlot(players: Player[], slots: FormationSlot[], slotId
   const role = slots.find(slot => slot.id === slotId)?.role;
   return role ? players.filter(player => player.position === role) : players;
 }
+/** The slots that must be filled before publishing — every slot, unless the fixture is marked
+ * as having no goalkeeper, in which case the "gk" slot isn't required. */
+export function requiredSlots(slots: FormationSlot[], noKeeper?: boolean): FormationSlot[] {
+  return noKeeper ? slots.filter(slot => slot.id !== "gk") : slots;
+}
 
 export function generateSlots(lines: number[], presetName?: string): FormationSlot[] {
   if (!validLines(lines)) throw new Error("Use 1–10 lines with 1–10 outfield players in total.");

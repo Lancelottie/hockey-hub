@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateSlots, assignPlayer, swapPlayers, withFormation, shirtMatches, eligiblePlayers, lineRole, playersForSlot } from "../lib/formation";
+import { generateSlots, assignPlayer, swapPlayers, withFormation, shirtMatches, eligiblePlayers, lineRole, playersForSlot, requiredSlots } from "../lib/formation";
 import { emptySnapshot, snapshotSchema } from "../lib/validation";
 import { getDb, migrateApp } from "../lib/db";
 import { readClub, writeClub, AccessError } from "../lib/repository";
@@ -114,6 +114,28 @@ test("SQLite persistence, correct fixture/team, presets, permissions and publica
   assert.equal(snapshotSchema.safeParse(invalid).success, false);
 });
 
+test("requiredSlots drops only the goalkeeper when noKeeper is set; publish accepts a GK-less fixture", () => {
+  const slots = generateSlots([3, 4, 3]);
+  assert.equal(requiredSlots(slots, false).length, 11);
+  assert.equal(requiredSlots(slots, true).length, 10);
+  assert.ok(!requiredSlots(slots, true).some(s => s.id === "gk"));
+
+  let filled = empty();
+  generateSlots([3, 4, 3]).filter(s => s.id !== "gk").forEach((slot, i) => { filled = assignPlayer(filled, slot.id, `p${i}`); });
+  filled.formation!.noKeeper = true;
+  filled.formation!.status = "published";
+  const data = emptySnapshot();
+  data.teams = [{ id: "team", name: "Team" }];
+  data.players = players;
+  data.matches = [{ id: "fixture", teamId: "team", opponent: "Opposition", date: "", isHome: true }];
+  data.lineups.fixture = filled;
+  assert.equal(snapshotSchema.safeParse(data).success, true);
+
+  // The very same GK-less lineup can't publish once noKeeper is turned back off.
+  const withoutFlag = structuredClone(data);
+  withoutFlag.lineups.fixture.formation!.noKeeper = false;
+  assert.equal(snapshotSchema.safeParse(withoutFlag).success, false);
+});
 test("presets map defence to our goal, forwards to attack, and extra lines to midfield", () => {
   const slots = generateSlots([4, 3, 3]);
   assert.equal(slots.filter(s => s.role === "Defender").length, 4);

@@ -6,7 +6,7 @@ import { AWAY_COLOR, GOALKEEPER_COLORS, HOME_COLOR } from "@/lib/kit-colors";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTeam } from "@/lib/team-context";
 import { loadLineup, loadPlayers, loadTeams, saveLineup, saveTeams, subscribeStorage, fixtureSyncInProgress } from "@/lib/storage";
-import { assignPlayer, BUILTIN_PRESETS, DEFAULT_LINES, generateSlots, lineLabel, playersForSlot, MAX_STARTERS, MAX_SUBS, playerAt, shirtMatches, swapPlayers, validLines, withFormation } from "@/lib/formation";
+import { assignPlayer, BUILTIN_PRESETS, DEFAULT_LINES, generateSlots, lineLabel, playersForSlot, MAX_STARTERS, MAX_SUBS, playerAt, requiredSlots, shirtMatches, swapPlayers, validLines, withFormation } from "@/lib/formation";
 import { sectionTeamIds } from "@/lib/team-sections";
 import type { Lineup, Match, Player, Team } from "@/lib/types";
 import Pitch from "../squad-selection/pitch";
@@ -87,6 +87,7 @@ export default function FormationEditor({ match }: { match: Match }) {
     `${p.name} · #${p.number ?? "—"}${p.teamId !== match.teamId ? ` (${teamNameById[p.teamId] ?? "other team"})` : ""}`;
   const formation = lineup.formation;
   const slots = formation ? generateSlots(formation.lines, formation.name) : [];
+  const required = requiredSlots(slots, formation?.noKeeper);
   const allSlots = [...slots, ...Array.from({ length: MAX_SUBS }, (_, i) => ({ id: `sub-${i}`, label: `Substitute ${i + 1}`, x: 0, y: 0 }))];
   const selectedPlayer = players.find(p => p.id === (selected ? playerAt(lineup, selected) : undefined));
   const positionPlayers = showAllPlayers ? players : playersForSlot(players, slots, selected);
@@ -166,6 +167,13 @@ export default function FormationEditor({ match }: { match: Match }) {
       }
     } catch (error) { setMessage((error as Error).message); }
   }
+  function setNoKeeper(value: boolean) {
+    if (!editable || !formation) return;
+    const nextAssignments = { ...formation.assignments };
+    if (value) delete nextAssignments.gk;
+    persist(withFormation(lineup, { ...formation, noKeeper: value, assignments: nextAssignments, status: "draft" }));
+    setMessage(value ? "No goalkeeper recorded for this fixture." : "Goalkeeper position re-enabled.");
+  }
   function savePreset() {
     if (!editable || !validLines(lines)) return;
     const presetName = name.trim() || lines.join("-");
@@ -176,15 +184,16 @@ export default function FormationEditor({ match }: { match: Match }) {
   }
   function slotButton(slot: { id: string; label: string }, onPitch: boolean) {
     const player = players.find(p => p.id === playerAt(lineup, slot.id));
-    const shirtColor = slot.id === "gk" ? GOALKEEPER_COLORS[player?.goalkeeperKit ?? "yellow"] : match.isHome ? HOME_COLOR : AWAY_COLOR;
+    const isEmptyGk = slot.id === "gk" && !player && !!formation?.noKeeper;
+    const shirtColor = isEmptyGk ? "#94a3b8" : slot.id === "gk" ? GOALKEEPER_COLORS[player?.goalkeeperKit ?? "yellow"] : match.isHome ? HOME_COLOR : AWAY_COLOR;
     const borrowed = player && player.teamId !== match.teamId;
     return <button type="button" data-slot={slot.id} disabled={!editable}
       title={borrowed ? `Borrowed from ${teamNameById[player.teamId] ?? "another team"}` : undefined}
-      aria-label={`${slot.label}: ${player ? `${player.name}, number ${player.number ?? "unset"}${borrowed ? `, borrowed from ${teamNameById[player.teamId] ?? "another team"}` : ""}` : "Empty"}`}
+      aria-label={`${slot.label}: ${player ? `${player.name}, number ${player.number ?? "unset"}${borrowed ? `, borrowed from ${teamNameById[player.teamId] ?? "another team"}` : ""}` : isEmptyGk ? "No goalkeeper for this fixture" : "Empty"}`}
       aria-pressed={selected === slot.id} aria-expanded={selected === slot.id} aria-controls={selected === slot.id ? "position-player-picker" : undefined} onClick={() => choose(slot.id)}
       className={`formation-slot ${selected === slot.id || swapFrom === slot.id ? "is-selected" : ""} ${onPitch ? "" : "bench-slot"}`}>
-      <span className="formation-number" style={{ color: shirtColor }}><Shirt aria-hidden="true" fill="currentColor" strokeWidth={1.2} /><span style={{ color: shirtColor === GOALKEEPER_COLORS.yellow ? "#142b3f" : "white" }}>{player ? player.number ?? "•" : "+"}</span></span>
-      <span className="formation-player">{player ? `${player.name.split(" ")[0]}${borrowed ? "*" : ""}` : slot.id === "gk" ? "GK" : slots.find(s => s.id === slot.id)?.role === "Defender" ? "Defence" : slots.find(s => s.id === slot.id)?.role === "Midfielder" ? "Mid" : slots.find(s => s.id === slot.id)?.role === "Forward" ? "Forward" : "Select"}</span>
+      <span className="formation-number" style={{ color: shirtColor }}><Shirt aria-hidden="true" fill="currentColor" strokeWidth={1.2} /><span style={{ color: shirtColor === GOALKEEPER_COLORS.yellow ? "#142b3f" : "white" }}>{player ? player.number ?? "•" : isEmptyGk ? "–" : "+"}</span></span>
+      <span className="formation-player">{player ? `${player.name.split(" ")[0]}${borrowed ? "*" : ""}` : slot.id === "gk" ? (isEmptyGk ? "No GK" : "GK") : slots.find(s => s.id === slot.id)?.role === "Defender" ? "Defence" : slots.find(s => s.id === slot.id)?.role === "Midfielder" ? "Mid" : slots.find(s => s.id === slot.id)?.role === "Forward" ? "Forward" : "Select"}</span>
     </button>;
   }
   return <section aria-label="Team formation" className="panel min-w-0 space-y-4">
@@ -196,7 +205,7 @@ export default function FormationEditor({ match }: { match: Match }) {
         {formation?.status === "published" && (
           <SaveLineupImage teamName={teamNameById[match.teamId] ?? "Team"} match={match} formation={formation} lineup={lineup} players={players} />
         )}
-        {editable && formation && <button className="primary-button" disabled={slots.length !== MAX_STARTERS || lineup.placements.length !== slots.length}
+        {editable && formation && <button className="primary-button" disabled={slots.length !== MAX_STARTERS || required.some(s => !playerAt(lineup, s.id))}
           onClick={() => { persist(withFormation(lineup, { ...formation, status: formation.status === "published" ? "draft" : "published" })); setMessage(""); }}>
           {formation.status === "published" ? "Unpublish team" : "Publish team"}
         </button>}
@@ -243,13 +252,15 @@ export default function FormationEditor({ match }: { match: Match }) {
       </div>
       <div className="formation-selection-panel space-y-3">
         <h3 className="font-semibold">Choose your players</h3>
-        <p className="text-sm">{lineup.placements.length}/{slots.length} starters assigned. Team players · fixture availability has not been recorded.</p>
+        <p className="text-sm">{required.filter(s => playerAt(lineup, s.id)).length}/{required.length} starters assigned{formation?.noKeeper ? " (no goalkeeper)" : ""}. Team players · fixture availability has not been recorded.</p>
         {loanTeamIds.length > 0 && <p className="text-sm">Players pooled to this team (Squads → Additional teams) are included automatically. To bring in someone else from {loanTeamIds.map(id => teamNameById[id]).filter(Boolean).join(", ")} just for this fixture, use “Loan a player” below — marked with * on the pitch, and the player’s team and your admins are notified.</p>}
         {editable && <Link href="/squads" className="block text-sm underline">Manage team players</Link>}
         {editable && <p className="text-sm">Select a pitch or bench position, type a shirt number and press Enter. The next empty position is selected automatically. Editing a published team returns it to draft.</p>}
         {swapFrom && <div role="status">Select a destination to move or swap.<button className="ml-2 underline" onClick={() => setSwapFrom(null)}>Cancel swap</button></div>}
         {selected && editable && <PositionPicker slotId={selected} onClose={() => setSelected(null)}>
           <h3 className="font-semibold">{allSlots.find(s => s.id === selected)?.label}</h3>
+          {selected === "gk" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!formation?.noKeeper} onChange={e => setNoKeeper(e.target.checked)} />No Keeper — play this fixture without a goalkeeper</label>}
+          {!(selected === "gk" && formation?.noKeeper) && <>
           {slots.some(s => s.id === selected) && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showAllPlayers} onChange={e => { setShowAllPlayers(e.target.checked); setMessage(""); }} />Show all positions</label>}
           {loanPool.length > 0 && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={loanMode} onChange={e => { setLoanMode(e.target.checked); setMessage(""); }} />Loan a player from {loanTeamIds.map(id => teamNameById[id]).filter(Boolean).join(", ")}</label>}
           {!positionPlayers.length && <p className="text-sm">No team players are recorded in this position. Update a player’s position or enable Show all positions.</p>}
@@ -264,6 +275,7 @@ export default function FormationEditor({ match }: { match: Match }) {
             return <option key={p.id} value={p.id} disabled={!!occupied}>{playerLabel(p)}{occupied ? ` — ${occupied.label}` : ""}</option>;
           })}</select></label>
           {selectedPlayer && <div className="flex flex-wrap gap-2"><button className="rounded border px-3 py-2" onClick={() => { persist(assignPlayer(lineup, selected)); setMessage("Player removed."); }}>Remove player</button><button className="rounded border px-3 py-2" onClick={() => { setSwapFrom(selected); setSelected(null); }}>Move / swap</button></div>}
+          </>}
         <p role="status" aria-live="polite" className="text-sm">{message}</p>
         </PositionPicker>}
         {!selected && <p role="status" aria-live="polite" className="text-sm">{message}</p>}

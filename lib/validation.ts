@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { generateSlots, validLines, withFormation } from "./formation";
+import { generateSlots, requiredSlots, validLines, withFormation } from "./formation";
 import { sameSection } from "./team-sections";
 const id = z
   .string()
@@ -60,6 +60,7 @@ const formation = z.object({
   lines: lineStructure,
   status: z.enum(["draft", "published"]),
   assignments: record(id),
+  noKeeper: z.boolean().optional(),
 }).strict();
 const lineup = z
   .object({
@@ -161,8 +162,9 @@ export const snapshotSchema = snapshotShape
           fail("Unknown formation position");
         if (JSON.stringify(value.placements) !== JSON.stringify(withFormation(value, value.formation).placements))
           fail("Formation assignments and placements disagree");
-        if (value.formation.status === "published" && (slots.length !== 11 || Object.keys(value.formation.assignments).length !== slots.length))
-          fail("Fill all 11 starting positions before publishing");
+        const required = requiredSlots(slots, value.formation.noKeeper);
+        if (value.formation.status === "published" && (slots.length !== 11 || required.some((slot) => !value.formation!.assignments[slot.id])))
+          fail(`Fill all ${required.length} starting positions before publishing`);
       }
       const ids = [
         ...value.placements.map((p) => p.playerId),

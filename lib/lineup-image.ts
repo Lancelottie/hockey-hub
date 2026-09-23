@@ -138,6 +138,7 @@ export async function renderLineupImage(params: {
     // Plain pitch colour is a fine fallback if the artwork can't load.
   }
   for (const slot of slots) {
+    if (slot.id === "gk" && formation.noKeeper) continue;
     const player = players.find((p) => p.id === formation.assignments[slot.id]);
     drawShirt(ctx, (slot.x / 100) * CANVAS_W, (slot.y / 100) * PITCH_H, STARTER_RADIUS, player, slot.id === "gk", match.isHome, match.teamId);
   }

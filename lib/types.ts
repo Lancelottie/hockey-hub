@@ -50,6 +50,7 @@ export type FormationPreset = { name: string; lines: number[] };
 export type Formation = FormationPreset & {
   status: "draft" | "published";
   assignments: Record<string, string>;
+  noKeeper?: boolean;
 };
 
 export type Lineup = {
