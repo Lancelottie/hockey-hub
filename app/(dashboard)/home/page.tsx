@@ -5,6 +5,7 @@ import { ArrowUpRight, CalendarDays, Users, ClipboardList } from "lucide-react";
 import { useTeam } from "@/lib/team-context";
 import { loadPlayers, loadMatches, loadLineup } from "@/lib/storage";
 import { formatMatchDateLong } from "@/lib/match-format";
+import NoticeBoard from "./notice-board";
 type PlayerLoan = {
   id: string;
   playerName: string;
@@ -199,6 +200,9 @@ export default function Home() {
           </div>
         </section>
       </div>
+      {activeTeam && (
+        <NoticeBoard clubId={club.id} teamId={activeTeam.id} canPost={canWrite} />
+      )}
     </div>
   );
 }
