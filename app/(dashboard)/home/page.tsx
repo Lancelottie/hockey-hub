@@ -13,7 +13,7 @@ type PlayerLoan = {
   opponent: string;
 };
 export default function Home() {
-  const { activeTeam, userName, club, canWrite } = useTeam();
+  const { activeTeam, club, canWrite } = useTeam();
   const [playerLoans, setPlayerLoans] = useState<PlayerLoan[]>([]);
   const [acknowledgingLoanId, setAcknowledgingLoanId] = useState<string | null>(null);
   useEffect(() => {
@@ -61,33 +61,6 @@ export default function Home() {
     : 0;
   return (
     <div className="space-y-7">
-      <section className="hero-panel">
-        <div>
-          <p className="eyebrow">
-            THE CLUBHOUSE / {activeTeam?.name ?? "LET’S GET STARTED"}
-          </p>
-          <h1>
-            Your team.
-            <br />
-            <span>Ready for the next chapter.</span>
-          </h1>
-          <p>
-            Welcome back, {userName.split(" ")[0]}. Bring your people together
-            and make match day count.
-          </p>
-          <Link href="/my-team" className="lime-button">
-            Meet your squad <ArrowUpRight size={18} />
-          </Link>
-        </div>
-        <div className="hero-emblem" aria-hidden="true">
-          <span>CC</span>
-          <small>
-            ONE TEAM
-            <br />
-            EVERY GAME
-          </small>
-        </div>
-      </section>
       <section aria-label="Team overview" className="grid gap-4 sm:grid-cols-3">
         {[
           {
