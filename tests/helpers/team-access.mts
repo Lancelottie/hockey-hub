@@ -57,7 +57,7 @@ export async function checkTeamAccess() {
   assert.equal((await save(fixtureCollision)).status, 403);
   const stolenDoc = structuredClone(visible.data);
   stolenDoc.reviews["m-first"] = initial.reviews["m-first"];
-  assert.equal((await save(stolenDoc)).status, 400);
+  assert.equal((await save(stolenDoc)).status, 403);
   assert.equal((await sourceGET(new Request(`${url}/api/england-hockey?clubId=scoped&teamId=first`, { headers: { cookie } }))).status, 403);
   assert.equal((await sourcePOST(new Request(`${url}/api/england-hockey`, { method: "POST", headers: { cookie, origin: url, "content-type": "application/json" }, body: JSON.stringify({ clubId: "scoped", teamId: "first", revision: visible.revision }) }))).status, 403);
   // England Hockey access is now restricted to the Northern Hockey Admin role; a scoped manager has none, even for their own team.

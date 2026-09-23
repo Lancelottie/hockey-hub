@@ -7,7 +7,7 @@ import { randomBytes } from "node:crypto";
 import { getMigrations } from "better-auth/db/migration";
 import { createAuth } from "../lib/auth";
 import { getDb, migrateApp } from "../lib/db";
-import { AccessError, writeClub } from "../lib/repository";
+import { AccessError, readClub, writeClub } from "../lib/repository";
 import { emptySnapshot } from "../lib/validation";
 import { listSectionRoster } from "../lib/section-roster";
 
@@ -63,5 +63,30 @@ test("section roster: visible to a team-scoped role, even though their own snaps
 
   await t.test("rejects a team the caller has no access to", async () => {
     await assert.rejects(listSectionRoster(users.ladies_3s_captain, "club", "mens1"), AccessError);
+  });
+
+  await t.test("a team-scoped captain can save a lineup/review for a player loaned in from a sibling team", async () => {
+    const before = await readClub(users.ladies_3s_captain, "club");
+    const own = before.data;
+    own.matches = [{ id: "fixture", teamId: "ladies3", opponent: "Rivals", date: "", isHome: true }];
+    // Mirror exactly what the browser sends: only the captain's own team/players, plus a
+    // lineup/review referencing a player loaned in from a sibling section team (p2, Ladies 2s) —
+    // never that player's team stub or record, which their restricted workspace never held.
+    own.lineups.fixture = {
+      placements: [{ playerId: "p3", x: 50, y: 50 }, { playerId: "p2", x: 40, y: 50 }],
+      subs: [null, null, null, null],
+    };
+    own.reviews.fixture = {
+      ourScore: "2", oppositionScore: "1", goalscorers: "", assists: "", summary: "",
+      womanOfTheMatchPlayerId: "p2", playerFeedback: { p2: "Great composure up front." },
+    };
+    await writeClub(users.ladies_3s_captain, "club", before.revision, own);
+
+    const after = await readClub(users.club_admin, "club");
+    assert.deepEqual(
+      after.data.lineups.fixture.placements.map((p) => p.playerId).sort(),
+      ["p2", "p3"],
+    );
+    assert.equal(after.data.reviews.fixture.playerFeedback.p2, "Great composure up front.");
   });
 });
