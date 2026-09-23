@@ -12,7 +12,10 @@ const PITCH_ART_H = 978;
 const PITCH_VIEWBOX_W = PITCH_ART_H;
 const PITCH_VIEWBOX_H = PITCH_ART_W;
 const PITCH_H = Math.round((CANVAS_W * PITCH_VIEWBOX_H) / PITCH_VIEWBOX_W);
-const SUB_ROW_H = 150;
+const STARTER_RADIUS = 62;
+const SUB_RADIUS = 44;
+const SUB_COL_W = 250;
+const SUB_ROW_H = 180;
 const FONT = "system-ui, -apple-system, 'Segoe UI', sans-serif";
 // Same glyph as lucide-react's <Shirt> icon (used on the pitch elsewhere in the app), on its
 // native 24x24 viewBox so the drawn shirts match rather than falling back to plain circles.
@@ -62,13 +65,13 @@ function drawShirt(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = isGoalkeeper && kit === "yellow" ? "#142b3f" : "#ffffff";
-  ctx.font = `700 ${Math.round(radius * 0.5)}px ${FONT}`;
+  ctx.font = `700 ${Math.round(radius * 0.56)}px ${FONT}`;
   ctx.fillText(player ? String(player.number ?? "•") : "+", numberCx, numberCy);
 
   if (player) {
     const borrowed = player.teamId !== ownTeamId;
     const label = `${player.name.split(" ")[0]}${borrowed ? "*" : ""}`;
-    ctx.font = `600 ${Math.round(radius * 0.5)}px ${FONT}`;
+    ctx.font = `600 ${Math.round(radius * 0.46)}px ${FONT}`;
     ctx.lineJoin = "round";
     ctx.lineWidth = Math.round(radius * 0.18);
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
@@ -136,7 +139,7 @@ export async function renderLineupImage(params: {
   }
   for (const slot of slots) {
     const player = players.find((p) => p.id === formation.assignments[slot.id]);
-    drawShirt(ctx, (slot.x / 100) * CANVAS_W, (slot.y / 100) * PITCH_H, 46, player, slot.id === "gk", match.isHome, match.teamId);
+    drawShirt(ctx, (slot.x / 100) * CANVAS_W, (slot.y / 100) * PITCH_H, STARTER_RADIUS, player, slot.id === "gk", match.isHome, match.teamId);
   }
   ctx.restore();
 
@@ -155,9 +158,9 @@ export async function renderLineupImage(params: {
     subs.forEach((player, i) => {
       const col = i % 4;
       const row = Math.floor(i / 4);
-      const cx = 110 + col * 240;
-      const cy = footerTop + 130 + row * SUB_ROW_H;
-      drawShirt(ctx, cx, cy, 34, player, false, match.isHome, match.teamId);
+      const cx = 130 + col * SUB_COL_W;
+      const cy = footerTop + 140 + row * SUB_ROW_H;
+      drawShirt(ctx, cx, cy, SUB_RADIUS, player, false, match.isHome, match.teamId);
     });
   }
 
