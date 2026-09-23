@@ -19,6 +19,7 @@ import { snapshotSchema, type Snapshot } from "@/lib/validation";
 import { ACCESS_REQUEST_LEVEL_LABELS, type AccessRequestLevel } from "@/lib/access-request-levels";
 import { SECTION_LABELS, type SectionKey } from "@/lib/team-sections";
 import CreateAccountModal from "./create-account-modal";
+import EditRolesModal from "./edit-roles-modal";
 type Member = { userId: string; name: string; email: string; roles: Role[] };
 type AccessRequest = {
   id: string;
@@ -44,7 +45,7 @@ export default function AdminPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState("");
-  const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
   const [accessRequestsError, setAccessRequestsError] = useState("");
   const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null);
@@ -171,24 +172,6 @@ export default function AdminPage() {
     }))
     .filter((entry) => entry.outstanding.length > 0)
     .sort((a, b) => a.match.date.localeCompare(b.match.date));
-  async function toggleRole(targetUserId: string, role: Role, add: boolean) {
-    setSavingUserId(targetUserId);
-    setMembersError("");
-    try {
-      const response = await fetch("/api/admin/members", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clubId: club.id, userId: targetUserId, role, action: add ? "add" : "remove" }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Unable to update role.");
-      setMembers(result.members);
-    } catch (e) {
-      setMembersError(e instanceof Error ? e.message : "Unable to update role.");
-    } finally {
-      setSavingUserId(null);
-    }
-  }
   function addTeam(event: React.FormEvent) {
     event.preventDefault();
     const trimmed = name.trim();
@@ -482,51 +465,59 @@ export default function AdminPage() {
         <h3 className="mt-5 mb-3 font-semibold">Manage roles</h3>
         <p className="mb-3 text-sm text-[var(--text-secondary)]">
           A member may hold more than one role (e.g. a club admin who is also a team
-          captain) and switch which is active from the topbar. You can grant yourself
-          an additional role here, but not remove your own. Removing someone&apos;s last
-          role removes their access to this club.
+          captain) and switch which is active from the topbar. Edit permissions to
+          grant yourself an extra role, but not remove your own. Removing someone&apos;s
+          last role removes their access to this club.
         </p>
         {membersLoading ? (
           <p className="text-sm text-[var(--text-secondary)]">Loading members…</p>
         ) : (
-          <ul className="space-y-3">
-            {members.map((member) => (
-              <li
-                key={member.userId}
-                className="rounded-lg bg-[var(--surface-muted)] p-3"
-              >
-                <p className="font-semibold">
-                  {member.name}
-                  {member.userId === userId && (
-                    <span className="text-[var(--text-secondary)]"> (you)</span>
-                  )}
-                </p>
-                <p className="text-sm text-[var(--text-secondary)]">{member.email}</p>
-                <ul className="mt-3 space-y-1">
-                  {ROLES.map((role) => {
-                    const held = member.roles.includes(role);
-                    const isSelf = member.userId === userId;
-                    const disabled =
-                      savingUserId === member.userId || (held && isSelf);
-                    return (
-                      <li key={role}>
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={held}
-                            disabled={disabled}
-                            onChange={() => void toggleRole(member.userId, role, !held)}
-                            className="h-4 w-4 accent-[var(--accent-primary)]"
-                          />
-                          {roleLabel(role)}
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </li>
-            ))}
-          </ul>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[36rem] text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border-primary)] text-left text-[var(--text-secondary)]">
+                  <th className="py-2 pr-4 font-medium">Name</th>
+                  <th className="py-2 pr-4 font-medium">Current permissions</th>
+                  <th className="py-2 pr-0 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((member) => (
+                  <tr key={member.userId} className="border-b border-[var(--border-primary)] last:border-b-0">
+                    <td className="py-3 pr-4 align-top">
+                      <p className="font-semibold">
+                        {member.name}
+                        {member.userId === userId && (
+                          <span className="text-[var(--text-secondary)]"> (you)</span>
+                        )}
+                      </p>
+                      <p className="text-sm text-[var(--text-secondary)]">{member.email}</p>
+                    </td>
+                    <td className="py-3 pr-4 align-top">
+                      <div className="flex flex-wrap gap-1.5">
+                        {member.roles.map((role) => (
+                          <span
+                            key={role}
+                            className="inline-flex items-center rounded-full bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--text-primary)]"
+                          >
+                            {roleLabel(role)}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-3 pr-0 text-right align-top">
+                      <button
+                        className="text-sm underline"
+                        onClick={() => setEditingMember(member)}
+                      >
+                        Edit permissions →
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         {membersError && (
           <p role="alert" className="mt-3 text-sm text-[var(--status-critical)]">
@@ -554,6 +545,18 @@ export default function AdminPage() {
           onCreated={() => {
             setAccessRequests((current) => current.filter((r) => r.id !== creatingAccountFor.id));
             setCreatingAccountFor(null);
+          }}
+        />
+      )}
+      {editingMember && (
+        <EditRolesModal
+          clubId={club.id}
+          member={editingMember}
+          currentUserId={userId}
+          onClose={() => setEditingMember(null)}
+          onSaved={(updatedMembers) => {
+            setMembers(updatedMembers);
+            setEditingMember(null);
           }}
         />
       )}
