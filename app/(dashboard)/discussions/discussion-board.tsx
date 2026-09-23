@@ -2,8 +2,18 @@
 import { useEffect, useState, type FormEvent } from "react";
 
 type Section = "ladies" | "mens" | "juniors";
-type Reply = { id: string; authorId: string; authorName: string; body: string; createdAt: string };
-type Discussion = { id: string; section: Section; authorName: string; body: string; createdAt: string; replies: Reply[] };
+type ReactionEmoji = "thumbs_up" | "thumbs_down" | "hockey_stick" | "celebrate";
+type Reaction = { emoji: ReactionEmoji; count: number; reactedByMe: boolean };
+type Reply = { id: string; authorId: string; authorName: string; body: string; createdAt: string; reactions: Reaction[] };
+type Discussion = {
+  id: string;
+  section: Section;
+  authorName: string;
+  body: string;
+  createdAt: string;
+  reactions: Reaction[];
+  replies: Reply[];
+};
 
 const SECTION_META: Record<Section, { label: string; border: string; bg: string; text: string; button: string }> = {
   ladies: { label: "Ladies", border: "#dc2626", bg: "#fef2f2", text: "#b91c1c", button: "#dc2626" },
@@ -11,6 +21,13 @@ const SECTION_META: Record<Section, { label: string; border: string; bg: string;
   juniors: { label: "Juniors", border: "#9333ea", bg: "#faf5ff", text: "#7e22ce", button: "#9333ea" },
 };
 const SECTIONS: Section[] = ["ladies", "mens", "juniors"];
+const REACTION_META: Record<ReactionEmoji, { glyph: string; label: string }> = {
+  thumbs_up: { glyph: "👍", label: "Thumbs up" },
+  thumbs_down: { glyph: "👎", label: "Thumbs down" },
+  hockey_stick: { glyph: "🏑", label: "Hockey stick" },
+  celebrate: { glyph: "🎉", label: "Celebrate" },
+};
+const REACTION_EMOJIS: ReactionEmoji[] = ["thumbs_up", "thumbs_down", "hockey_stick", "celebrate"];
 
 function formatPostedAt(value: string) {
   let date = new Date(value);
@@ -37,6 +54,7 @@ export default function DiscussionBoard({
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [postingReplyTo, setPostingReplyTo] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [reacting, setReacting] = useState<string | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -140,6 +158,59 @@ export default function DiscussionBoard({
     }
   }
 
+  async function toggleReaction(discussionId: string, replyId: string | null, emoji: ReactionEmoji) {
+    const key = `${discussionId}:${replyId ?? ""}:${emoji}`;
+    setReacting(key);
+    setError("");
+    try {
+      const response = await fetch("/api/club-discussions/reactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clubId, discussionId, ...(replyId ? { replyId } : {}), emoji }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Unable to react.");
+      setDiscussions(result.discussions);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to react.");
+    } finally {
+      setReacting(null);
+    }
+  }
+
+  function ReactionBar({ discussionId, replyId, reactions }: { discussionId: string; replyId: string | null; reactions: Reaction[] }) {
+    return (
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {REACTION_EMOJIS.map((emoji) => {
+          const found = reactions.find((r) => r.emoji === emoji);
+          const count = found?.count ?? 0;
+          const mine = found?.reactedByMe ?? false;
+          const key = `${discussionId}:${replyId ?? ""}:${emoji}`;
+          return (
+            <button
+              key={emoji}
+              type="button"
+              title={REACTION_META[emoji].label}
+              aria-label={`${REACTION_META[emoji].label}${count ? `, ${count}` : ""}`}
+              aria-pressed={mine}
+              disabled={reacting === key}
+              onClick={() => void toggleReaction(discussionId, replyId, emoji)}
+              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs disabled:opacity-55"
+              style={
+                mine
+                  ? { borderColor: "var(--accent-primary)", background: "var(--accent-primary-light)" }
+                  : { borderColor: "var(--border-primary)", background: "transparent" }
+              }
+            >
+              <span aria-hidden="true">{REACTION_META[emoji].glyph}</span>
+              {count > 0 && <span className="font-medium text-[var(--text-primary)]">{count}</span>}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <section className="panel">
       <div className="panel-heading">
@@ -225,6 +296,7 @@ export default function DiscussionBoard({
                 <p className="mt-2 text-xs text-[var(--text-secondary)]">
                   {discussion.authorName} · {formatPostedAt(discussion.createdAt)}
                 </p>
+                <ReactionBar discussionId={discussion.id} replyId={null} reactions={discussion.reactions} />
                 {discussion.replies.length > 0 && (
                   <ul className="mt-3 space-y-2 border-l-2 border-[var(--border-primary)] pl-3">
                     {discussion.replies.map((reply) => (
@@ -244,6 +316,7 @@ export default function DiscussionBoard({
                         <p className="mt-1 text-xs text-[var(--text-secondary)]">
                           {reply.authorName} · {formatPostedAt(reply.createdAt)}
                         </p>
+                        <ReactionBar discussionId={discussion.id} replyId={reply.id} reactions={reply.reactions} />
                       </li>
                     ))}
                   </ul>

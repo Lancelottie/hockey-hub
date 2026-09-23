@@ -15,6 +15,8 @@ import {
   listClubDiscussions,
   postClubDiscussion,
   postClubDiscussionReply,
+  toggleDiscussionReaction,
+  toggleReplyReaction,
 } from "../lib/club-discussions";
 
 const dir = mkdtempSync(join(tmpdir(), "cocaptain-club-discussions-"));
@@ -58,6 +60,45 @@ test("club discussions: club-wide regardless of team/section, author or manager 
     const withReply = (await listClubDiscussions(users.club_admin, "club"))[0];
     assert.equal(withReply.replies.length, 1);
     assert.equal(withReply.replies[0].authorName, "Read Only");
+  });
+
+  await t.test("anyone can react to a discussion or a reply; counts total, toggling removes it", async () => {
+    const [discussion] = await listClubDiscussions(users.club_admin, "club");
+    const [reply] = discussion.replies;
+    assert.deepEqual(discussion.reactions, []);
+    assert.deepEqual(reply.reactions, []);
+
+    await toggleDiscussionReaction(users.read_only, "club", discussion.id, "celebrate");
+    await toggleDiscussionReaction(users.club_admin, "club", discussion.id, "celebrate");
+    await toggleDiscussionReaction(users.club_admin, "club", discussion.id, "hockey_stick");
+    await toggleReplyReaction(users.club_admin, "club", discussion.id, reply.id, "thumbs_up");
+
+    const withReactions = (await listClubDiscussions(users.ladies_1s_captain, "club"))[0];
+    assert.deepEqual(
+      withReactions.reactions.sort((a, b) => a.emoji.localeCompare(b.emoji)),
+      [
+        { emoji: "celebrate", count: 2, reactedByMe: false },
+        { emoji: "hockey_stick", count: 1, reactedByMe: false },
+      ],
+    );
+    assert.deepEqual(withReactions.replies[0].reactions, [{ emoji: "thumbs_up", count: 1, reactedByMe: false }]);
+
+    // The caller's own reaction is flagged; toggling the same emoji again removes it.
+    const asAdmin = (await listClubDiscussions(users.club_admin, "club"))[0];
+    assert.deepEqual(
+      asAdmin.reactions.find((r) => r.emoji === "celebrate"),
+      { emoji: "celebrate", count: 2, reactedByMe: true },
+    );
+    await toggleDiscussionReaction(users.club_admin, "club", discussion.id, "celebrate");
+    const afterUntoggle = (await listClubDiscussions(users.club_admin, "club"))[0];
+    assert.deepEqual(afterUntoggle.reactions.find((r) => r.emoji === "celebrate"), { emoji: "celebrate", count: 1, reactedByMe: false });
+  });
+
+  await t.test("rejects a reaction to a discussion that doesn't exist", async () => {
+    await assert.rejects(
+      toggleDiscussionReaction(users.club_admin, "club", "missing-id", "thumbs_up"),
+      AccessError,
+    );
   });
 
   await t.test("rejects a reply to a discussion that doesn't exist", async () => {

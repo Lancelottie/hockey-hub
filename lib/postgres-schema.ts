@@ -154,6 +154,18 @@ export const postgresSchema = `
       body TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS club_discussion_reactions (
+      discussion_id TEXT NOT NULL REFERENCES club_discussions(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      emoji TEXT NOT NULL CHECK(emoji IN ('thumbs_up','thumbs_down','hockey_stick','celebrate')),
+      PRIMARY KEY(discussion_id,user_id,emoji)
+    );
+    CREATE TABLE IF NOT EXISTS club_discussion_reply_reactions (
+      reply_id TEXT NOT NULL REFERENCES club_discussion_replies(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      emoji TEXT NOT NULL CHECK(emoji IN ('thumbs_up','thumbs_down','hockey_stick','celebrate')),
+      PRIMARY KEY(reply_id,user_id,emoji)
+    );
     CREATE TABLE IF NOT EXISTS data_migrations (
       id TEXT PRIMARY KEY, source_digest TEXT NOT NULL, counts TEXT NOT NULL,
       completed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
