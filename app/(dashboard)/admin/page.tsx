@@ -18,6 +18,7 @@ import { readLegacy } from "@/lib/legacy-import";
 import { snapshotSchema, type Snapshot } from "@/lib/validation";
 import { ACCESS_REQUEST_LEVEL_LABELS, type AccessRequestLevel } from "@/lib/access-request-levels";
 import { SECTION_LABELS, type SectionKey } from "@/lib/team-sections";
+import CreateAccountModal from "./create-account-modal";
 type Member = { userId: string; name: string; email: string; roles: Role[] };
 type AccessRequest = {
   id: string;
@@ -47,6 +48,7 @@ export default function AdminPage() {
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
   const [accessRequestsError, setAccessRequestsError] = useState("");
   const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null);
+  const [creatingAccountFor, setCreatingAccountFor] = useState<AccessRequest | null>(null);
   const [playerLoans, setPlayerLoans] = useState<PlayerLoan[]>([]);
   const [playerLoansError, setPlayerLoansError] = useState("");
   const [acknowledgingLoanId, setAcknowledgingLoanId] = useState<string | null>(null);
@@ -307,13 +309,21 @@ export default function AdminPage() {
                   <p className="font-semibold text-[var(--text-primary)]">
                     {request.name} · {request.email}
                   </p>
-                  <button
-                    className="text-sm underline disabled:opacity-55"
-                    disabled={resolvingRequestId === request.id}
-                    onClick={() => void resolveRequest(request.id)}
-                  >
-                    Mark account created →
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      className="text-sm underline disabled:opacity-55"
+                      disabled={resolvingRequestId === request.id}
+                      onClick={() => void resolveRequest(request.id)}
+                    >
+                      Already created? Mark done
+                    </button>
+                    <button
+                      className="primary-button"
+                      onClick={() => setCreatingAccountFor(request)}
+                    >
+                      Create account →
+                    </button>
+                  </div>
                 </div>
                 <p className="mt-2 text-sm text-[var(--text-secondary)]">
                   {request.sections.map((s) => SECTION_LABELS[s]).join(", ")} ·{" "}
@@ -536,6 +546,17 @@ export default function AdminPage() {
           </li>)}
         </ul>
       </section>
+      {creatingAccountFor && (
+        <CreateAccountModal
+          clubId={club.id}
+          request={creatingAccountFor}
+          onClose={() => setCreatingAccountFor(null)}
+          onCreated={() => {
+            setAccessRequests((current) => current.filter((r) => r.id !== creatingAccountFor.id));
+            setCreatingAccountFor(null);
+          }}
+        />
+      )}
     </div>
   );
 }

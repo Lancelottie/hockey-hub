@@ -440,6 +440,25 @@ select {
 .section-card-request-link:hover {
   color: var(--accent-primary-hover);
 }
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(21 44 67 / 55%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+.modal-panel {
+  background: white;
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 480px;
+  width: 100%;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
 .panel-heading {
   display: flex;
   align-items: center;
