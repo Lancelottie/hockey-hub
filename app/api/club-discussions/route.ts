@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getActiveSession } from "@/lib/session";
 import { AccessError } from "@/lib/repository";
-import { deleteTeamDiscussion, listTeamDiscussions, postTeamDiscussion } from "@/lib/team-discussions";
+import { deleteClubDiscussion, listClubDiscussions, postClubDiscussion, SECTIONS } from "@/lib/club-discussions";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 const id = z
@@ -9,13 +9,14 @@ const id = z
   .min(1)
   .max(100)
   .regex(/^[a-zA-Z0-9_-]+$/);
-const postBody = z.object({ clubId: id, teamId: id, body: z.string().trim().min(1).max(2000) }).strict();
-const deleteBody = z.object({ clubId: id, teamId: id, id }).strict();
+const section = z.enum(SECTIONS);
+const postBody = z.object({ clubId: id, section, body: z.string().trim().min(1).max(2000) }).strict();
+const deleteBody = z.object({ clubId: id, id }).strict();
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { "Cache-Control": "private, no-store" } });
 function failure(error: unknown) {
   if (error instanceof AccessError) return json({ error: error.message }, error.status);
-  console.error("team_discussion_request_failed");
+  console.error("club_discussion_request_failed");
   return json({ error: "The discussion board could not be loaded or saved." }, 500);
 }
 function requireSameOrigin(request: Request) {
@@ -54,9 +55,8 @@ export async function GET(request: Request) {
     if (!session) return json({ error: "Sign in to continue." }, 401);
     const url = new URL(request.url);
     const clubId = id.safeParse(url.searchParams.get("clubId"));
-    const teamId = id.safeParse(url.searchParams.get("teamId"));
-    if (!clubId.success || !teamId.success) return json({ error: "Choose a club and team." }, 400);
-    return json({ discussions: (await listTeamDiscussions(session.user.id, clubId.data, teamId.data)) });
+    if (!clubId.success) return json({ error: "Choose a club." }, 400);
+    return json({ discussions: (await listClubDiscussions(session.user.id, clubId.data)) });
   } catch (error) {
     return failure(error);
   }
@@ -69,9 +69,9 @@ export async function POST(request: Request) {
     const raw = await readJsonBody(request, 4096);
     const parsed = postBody.safeParse(raw);
     if (!parsed.success) return json({ error: "Write something before posting." }, 400);
-    const { clubId, teamId, body } = parsed.data;
-    await postTeamDiscussion(session.user.id, clubId, teamId, session.user.name, body);
-    return json({ discussions: (await listTeamDiscussions(session.user.id, clubId, teamId)) });
+    const { clubId, section, body } = parsed.data;
+    await postClubDiscussion(session.user.id, clubId, section, session.user.name, body);
+    return json({ discussions: (await listClubDiscussions(session.user.id, clubId)) });
   } catch (error) {
     return failure(error);
   }
@@ -84,9 +84,9 @@ export async function DELETE(request: Request) {
     const raw = await readJsonBody(request, 4096);
     const parsed = deleteBody.safeParse(raw);
     if (!parsed.success) return json({ error: "Choose an existing discussion." }, 400);
-    const { clubId, teamId, id: discussionId } = parsed.data;
-    await deleteTeamDiscussion(session.user.id, clubId, teamId, discussionId);
-    return json({ discussions: (await listTeamDiscussions(session.user.id, clubId, teamId)) });
+    const { clubId, id: discussionId } = parsed.data;
+    await deleteClubDiscussion(session.user.id, clubId, discussionId);
+    return json({ discussions: (await listClubDiscussions(session.user.id, clubId)) });
   } catch (error) {
     return failure(error);
   }

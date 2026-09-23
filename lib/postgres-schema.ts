@@ -137,17 +137,19 @@ export const postgresSchema = `
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','acknowledged')),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE TABLE IF NOT EXISTS team_discussions (
+    DROP TABLE IF EXISTS team_discussion_replies;
+    DROP TABLE IF EXISTS team_discussions;
+    CREATE TABLE IF NOT EXISTS club_discussions (
       id TEXT PRIMARY KEY,
-      club_id TEXT NOT NULL, team_id TEXT NOT NULL,
+      club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+      section TEXT NOT NULL CHECK(section IN ('ladies','mens','juniors')),
       author_id TEXT NOT NULL, author_name TEXT NOT NULL,
       body TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(club_id,team_id) REFERENCES teams(club_id,id) ON DELETE CASCADE
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE TABLE IF NOT EXISTS team_discussion_replies (
+    CREATE TABLE IF NOT EXISTS club_discussion_replies (
       id TEXT PRIMARY KEY,
-      discussion_id TEXT NOT NULL REFERENCES team_discussions(id) ON DELETE CASCADE,
+      discussion_id TEXT NOT NULL REFERENCES club_discussions(id) ON DELETE CASCADE,
       author_id TEXT NOT NULL, author_name TEXT NOT NULL,
       body TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
