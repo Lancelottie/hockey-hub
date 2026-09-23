@@ -20,7 +20,7 @@ export default function FormationEditor({ match }: { match: Match }) {
   const [lines, setLines] = useState(lineup.formation?.lines ?? DEFAULT_LINES);
   const [name, setName] = useState(lineup.formation?.name ?? "");
   const [presets, setPresets] = useState(() => loadTeams().find(t => t.id === match.teamId)?.formationPresets ?? []);
-  const presetOptions = [...BUILTIN_PRESETS.map(lines => ({ lines, name: lines.join("-") })), ...presets];
+  const presetOptions = [...BUILTIN_PRESETS, ...presets];
   const [presetSelection, setPresetSelection] = useState(() => {
     const index = presetOptions.findIndex(p => p.name === lineup.formation?.name && p.lines.join() === lineup.formation.lines.join());
     return index < 0 ? "" : String(index);
