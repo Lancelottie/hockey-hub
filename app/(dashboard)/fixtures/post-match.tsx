@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatFixtureLabel, formatMatchDateLong } from "@/lib/match-format";
+import { useTeam } from "@/lib/team-context";
 import {
   loadLineup,
   loadPlayers,
@@ -27,7 +28,9 @@ export default function PostMatch({
   match: Match | null;
   teamName: string;
 }) {
+  const { club } = useTeam();
   const [players, setPlayers] = useState<Player[]>([]);
+  const [sectionPlayers, setSectionPlayers] = useState<Player[]>([]);
   const [review, setReview] = useState<PostMatchReview>(EMPTY_REVIEW);
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -41,6 +44,24 @@ export default function PostMatch({
   }, [match]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  // A team-scoped role's own player list (loadPlayers) never includes a player loaned in from
+  // a sibling section team — see selectTeams in lib/repository.ts — so without this, a loaned
+  // player who took part would silently disappear from the feedback list for that caller.
+  useEffect(() => {
+    if (!match) return;
+    const controller = new AbortController();
+    fetch(`/api/section-roster?clubId=${encodeURIComponent(club.id)}&teamId=${encodeURIComponent(match.teamId)}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then((response) => response.json())
+      .then((result) => {
+        if (!controller.signal.aborted) setSectionPlayers(result.players ?? []);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [club.id, match]);
+
   const playersWhoPlayed = useMemo(() => {
     if (!match) return [];
     const lineup = loadLineup(match.id);
@@ -52,13 +73,14 @@ export default function PostMatch({
         ),
       ]),
     );
+    const allPlayers = [...players, ...sectionPlayers.filter((p) => !players.some((lp) => lp.id === p.id))];
 
     return selectedPlayerIds
       .map(
-        (playerId) => players.find((player) => player.id === playerId) ?? null,
+        (playerId) => allPlayers.find((player) => player.id === playerId) ?? null,
       )
       .filter((player): player is Player => Boolean(player));
-  }, [match, players]);
+  }, [match, players, sectionPlayers]);
 
   function updateReview(
     updater: (current: PostMatchReview) => PostMatchReview,

@@ -4,7 +4,7 @@ import { withFormation } from "./formation";
 import { normalizeCaptainTasks } from "./captain-tasks";
 import { getStore, lockClub } from "./database";
 import { canAdmin, canManage, defaultActiveRole, isNorthernHockeyAdmin, roleTeamName, type Role } from "./users";
-import { emptySnapshot, snapshotSchema, type Snapshot } from "./validation";
+import { emptySnapshot, snapshotSchema, snapshotShape, type Snapshot } from "./validation";
 export class AccessError extends Error {
   constructor(
     public status: number,
@@ -162,7 +162,11 @@ export async function writeClub(
   revision: number,
   input: unknown,
 ) {
-  let data = snapshotSchema.parse(input);
+  // Shape only for now: a team-scoped member's submission only covers their own team, so a
+  // player loaned in from another team isn't resolvable until merged with the server's other-team
+  // data below. The full cross-reference schema runs once that merge has happened (or, for a
+  // club-wide writer who already submits everything, right after this block).
+  let data = snapshotShape.parse(input);
   const db = getStore();
   return db
     .transaction(async () => {
@@ -190,7 +194,17 @@ export async function writeClub(
         const hidden = selectTeams(current.data, new Set(current.data.teams.filter(t => !allowed.has(t.id)).map(t => t.id)));
         const hiddenPlayerIds = new Set(hidden.players.map(p => p.id));
         const hiddenMatchIds = new Set(hidden.matches.map(m => m.id));
-        if (data.players.some(p => hiddenPlayerIds.has(p.id)) || data.matches.some(m => hiddenMatchIds.has(m.id)))
+        // A team-scoped submission must not claim another team's records or documents, even ones
+        // it never sent us team/player rows for — the later object-spread merge would otherwise
+        // let a client-supplied document silently overwrite another team's hidden one.
+        if (
+          data.players.some(p => hiddenPlayerIds.has(p.id)) ||
+          data.matches.some(m => hiddenMatchIds.has(m.id)) ||
+          Object.keys(data.lineups).some(id => hiddenMatchIds.has(id)) ||
+          Object.keys(data.captainTasks).some(id => hiddenMatchIds.has(id)) ||
+          Object.keys(data.reviews).some(id => hiddenMatchIds.has(id)) ||
+          Object.keys(data.assessments).some(id => hiddenPlayerIds.has(id))
+        )
           throw new AccessError(403, "You do not have permission for these records.");
         // Preserve all other teams and their documents when the client saves its partial workspace.
         const editedTeams = new Map(data.teams.map(t => [t.id, t]));
@@ -202,6 +216,8 @@ export async function writeClub(
           reviews: { ...hidden.reviews, ...data.reviews },
           assessments: { ...hidden.assessments, ...data.assessments },
         });
+      } else {
+        data = snapshotSchema.parse(data);
       }
       // Integration-owned fixtures may only be changed by the sync service.
       // Removing their whole team is still available to club administrators.

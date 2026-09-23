@@ -7,11 +7,12 @@ import { useTeam } from "@/lib/team-context";
 import { canAdmin, isNorthernHockeyAdmin } from "@/lib/users";
 import LogoutButton from "../logout-button";
 const items = [
+  { href: "/sections", label: "Sections" },
   { href: "/home", label: "Home" },
   { href: "/my-team", label: "My Team" },
   { href: "/squads", label: "Players" },
   { href: "/fixtures", label: "Fixtures" },
-  { href: "/selection", label: "Selection" },
+  { href: "/discussions", label: "Discussions" },
 ];
 export default function Sidebar() {
   const pathname = usePathname();

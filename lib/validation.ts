@@ -121,7 +121,11 @@ const assessment = z
     lastSeasonTeam: z.enum(["1s", "2s", "Development"]),
   })
   .strict();
-export const snapshotSchema = z
+// Shape-only: field types and per-record constraints, without the cross-record referential
+// checks below. Used to parse a team-scoped member's own-team-only submission before it has
+// been merged with the other teams' server-held data (see writeClub) — at that point players
+// loaned in from another team aren't resolvable yet, so the full schema would reject it.
+export const snapshotShape = z
   .object({
     teams: z
       .array(z.object({ id, name: z.string().trim().min(1).max(120), formationPresets: z.array(preset).max(50).optional() }).strict())
@@ -133,7 +137,8 @@ export const snapshotSchema = z
     reviews: record(review),
     assessments: record(assessment),
   })
-  .strict()
+  .strict();
+export const snapshotSchema = snapshotShape
   .superRefine((data, ctx) => {
     const fail = (message: string) => ctx.addIssue({ code: "custom", message });
     for (const rows of [data.teams, data.players, data.matches])
@@ -196,10 +201,13 @@ export const emptySnapshot = (): Snapshot => ({
   reviews: {},
   assessments: {},
 });
+// Shape only, like snapshotShape above: a team-scoped member's submission is only their own
+// team's slice, so the full cross-reference schema can't run until writeClub has merged it with
+// the server's other-team data. writeClub performs that full validation itself once merged.
 export const saveSchema = z
   .object({
     clubId: id,
     revision: z.number().int().nonnegative(),
-    data: snapshotSchema,
+    data: snapshotShape,
   })
   .strict();

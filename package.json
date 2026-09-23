@@ -44,5 +44,11 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true,
+    "unrs-resolver@1.12.2": true
   }
 }

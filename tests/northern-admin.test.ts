@@ -119,7 +119,7 @@ test("Northern Hockey Admin: scope, England Hockey gating, submissions and cross
     assert.deepEqual(afterRemoval.filter((m) => m.playerId === "p1").map((m) => m.teamId), ["three"]);
   });
 
-  await t.test("admin role management: add/remove, self-add allowed, self-remove and last-role blocked", async () => {
+  await t.test("admin role management: add/remove, self-add allowed, self-remove blocked, last role removable", async () => {
     await assert.rejects(addMemberRole(users.manager, "club", users.coach, "read_only"), AccessError);
     await assert.rejects(removeMemberRole(users.manager, "club", users.coach, "coach"), AccessError);
     // Self-add cannot escalate beyond existing admin access, so it's allowed...
@@ -140,7 +140,10 @@ test("Northern Hockey Admin: scope, England Hockey gating, submissions and cross
       db.prepare("SELECT 1 FROM membership_team_access WHERE user_id=? AND club_id='club' AND role='coach'").get(users.coach),
       undefined,
     );
-    // A member must always keep at least one role.
-    await assert.rejects(removeMemberRole(users.club_admin, "club", users.coach, "northern_hockey_admin"), AccessError);
+    // Removing a member's last role is allowed: it revokes their access to this club,
+    // same as never having been granted it, rather than being blocked outright.
+    await removeMemberRole(users.club_admin, "club", users.coach, "northern_hockey_admin");
+    assert.equal((await listMembers(users.club_admin, "club")).find((m) => m.userId === users.coach), undefined);
+    assert.equal((await listClubs(users.coach)).find((c) => c.id === "club"), undefined);
   });
 });

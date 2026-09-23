@@ -9,13 +9,14 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     "/",
+    "/change-password/:path*",
+    "/sections/:path*",
     "/home/:path*",
     "/my-team/:path*",
     "/teams/:path*",
     "/squads/:path*",
     "/fixtures/:path*",
     "/squad-selection/:path*",
-    "/selection/:path*",
     "/admin/:path*",
   ],
 };

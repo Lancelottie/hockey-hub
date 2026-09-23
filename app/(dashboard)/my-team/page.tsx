@@ -39,7 +39,10 @@ export default function MyTeam() {
             {activeTeam?.name ?? "Choose a team"} · {players.length} players
           </p>
         </div>
-        <Link href="/selection" className="primary-button">
+        <Link
+          href={next ? `/fixtures/${next.id}` : "/fixtures"}
+          className="primary-button"
+        >
           Choose your lineup →
         </Link>
       </div>

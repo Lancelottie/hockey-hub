@@ -318,6 +318,22 @@ select {
 .primary-button:hover {
   background: var(--accent-primary-hover);
 }
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+}
+.secondary-button:hover {
+  background: var(--surface-muted);
+}
 .hero-emblem {
   flex-shrink: 0;
   width: 200px;
@@ -375,6 +391,73 @@ select {
   border: 1px solid var(--border-primary);
   border-radius: 12px;
   padding: 24px;
+}
+.section-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  /* Safari doesn't stretch <button> grid items to the row height like other elements;
+     without this, cards with more text (e.g. wrapped "Not a member" copy) render taller
+     than their siblings and the row looks uneven. */
+  align-self: stretch;
+  width: 100%;
+  background: white;
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  padding: 23px;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+.section-card:not(.is-disabled):hover {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-light);
+}
+.section-card strong {
+  font-size: 20px;
+  font-weight: 750;
+}
+.section-card span {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.section-card.is-disabled {
+  background: var(--surface-muted);
+  cursor: default;
+}
+.section-card.is-disabled strong,
+.section-card.is-disabled span {
+  color: var(--text-muted);
+}
+.section-card-request-link {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  align-self: flex-start;
+}
+.section-card-request-link:hover {
+  color: var(--accent-primary-hover);
+}
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(21 44 67 / 55%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+.modal-panel {
+  background: white;
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 480px;
+  width: 100%;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
 }
 .panel-heading {
   display: flex;
@@ -705,13 +788,29 @@ select {
   font-weight: 700;
   margin-bottom: 8px;
 }
-.login-form input {
+.login-form input:not([type="checkbox"]) {
   display: block;
   width: 100%;
   padding: 13px;
   border: 1px solid var(--border-primary);
   border-radius: 6px;
   margin-bottom: 20px;
+}
+.login-form select {
+  display: block;
+  width: 100%;
+  padding: 13px 34px 13px 13px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+.login-form .checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+  font-size: 14px;
+  margin-bottom: 0;
 }
 @media (max-width: 767px) {
   .club-header-inner {

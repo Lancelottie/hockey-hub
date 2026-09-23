@@ -5,6 +5,9 @@ export const postgresSchema = `
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended')),
       last_login TEXT
     );
+    ALTER TABLE app_accounts ADD COLUMN IF NOT EXISTS must_change_password TEXT NOT NULL DEFAULT 'false';
+    ALTER TABLE app_accounts DROP CONSTRAINT IF EXISTS app_accounts_must_change_password_check;
+    ALTER TABLE app_accounts ADD CONSTRAINT app_accounts_must_change_password_check CHECK(must_change_password IN ('true','false'));
     CREATE TABLE IF NOT EXISTS clubs (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -32,13 +35,24 @@ export const postgresSchema = `
     ALTER TABLE membership_team_access ALTER COLUMN role SET NOT NULL;
     ALTER TABLE membership_team_access DROP CONSTRAINT IF EXISTS membership_team_access_role_check;
     ALTER TABLE membership_team_access ADD CONSTRAINT membership_team_access_role_check CHECK(role IN (${roleSqlValues}));
-    ALTER TABLE membership_team_access DROP CONSTRAINT IF EXISTS membership_team_access_user_id_club_id_fkey;
-    ALTER TABLE membership_team_access DROP CONSTRAINT IF EXISTS membership_team_access_pkey;
-    ALTER TABLE club_memberships DROP CONSTRAINT IF EXISTS club_memberships_pkey;
-    ALTER TABLE club_memberships ADD CONSTRAINT club_memberships_pkey PRIMARY KEY(user_id,club_id,role);
-    ALTER TABLE membership_team_access ADD CONSTRAINT membership_team_access_pkey PRIMARY KEY(user_id,club_id,role);
-    ALTER TABLE membership_team_access ADD CONSTRAINT membership_team_access_user_id_club_id_fkey
-      FOREIGN KEY(user_id,club_id,role) REFERENCES club_memberships(user_id,club_id,role) ON DELETE CASCADE;
+    -- Re-running this script is otherwise a no-op, but once active_roles/membership_team_access's
+    -- foreign keys already depend on the widened club_memberships_pkey, unconditionally dropping and
+    -- recreating it fails with "other objects depend on it". Only widen it the first time it's needed.
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'club_memberships'::regclass AND contype = 'p' AND array_length(conkey, 1) = 3
+      ) THEN
+        ALTER TABLE membership_team_access DROP CONSTRAINT IF EXISTS membership_team_access_user_id_club_id_fkey;
+        ALTER TABLE membership_team_access DROP CONSTRAINT IF EXISTS membership_team_access_pkey;
+        ALTER TABLE club_memberships DROP CONSTRAINT IF EXISTS club_memberships_pkey;
+        ALTER TABLE club_memberships ADD CONSTRAINT club_memberships_pkey PRIMARY KEY(user_id,club_id,role);
+        ALTER TABLE membership_team_access ADD CONSTRAINT membership_team_access_pkey PRIMARY KEY(user_id,club_id,role);
+        ALTER TABLE membership_team_access ADD CONSTRAINT membership_team_access_user_id_club_id_fkey
+          FOREIGN KEY(user_id,club_id,role) REFERENCES club_memberships(user_id,club_id,role) ON DELETE CASCADE;
+      END IF;
+    END $$;
     CREATE TABLE IF NOT EXISTS active_roles (
       user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
       club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
@@ -104,6 +118,41 @@ export const postgresSchema = `
       PRIMARY KEY(club_id,player_id,team_id),
       FOREIGN KEY(club_id,player_id) REFERENCES players(club_id,id) ON DELETE CASCADE,
       FOREIGN KEY(club_id,team_id) REFERENCES teams(club_id,id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS access_requests (
+      id TEXT PRIMARY KEY,
+      club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+      name TEXT NOT NULL, email TEXT NOT NULL, sections TEXT NOT NULL,
+      requested_levels TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','done')),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS player_loans (
+      id TEXT PRIMARY KEY,
+      club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+      player_id TEXT NOT NULL, player_name TEXT NOT NULL,
+      from_team_id TEXT NOT NULL, from_team_name TEXT NOT NULL,
+      to_team_id TEXT NOT NULL, to_team_name TEXT NOT NULL,
+      match_id TEXT NOT NULL, opponent TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','acknowledged')),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    DROP TABLE IF EXISTS team_discussion_replies;
+    DROP TABLE IF EXISTS team_discussions;
+    CREATE TABLE IF NOT EXISTS club_discussions (
+      id TEXT PRIMARY KEY,
+      club_id TEXT NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+      section TEXT NOT NULL CHECK(section IN ('ladies','mens','juniors')),
+      author_id TEXT NOT NULL, author_name TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS club_discussion_replies (
+      id TEXT PRIMARY KEY,
+      discussion_id TEXT NOT NULL REFERENCES club_discussions(id) ON DELETE CASCADE,
+      author_id TEXT NOT NULL, author_name TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS data_migrations (
       id TEXT PRIMARY KEY, source_digest TEXT NOT NULL, counts TEXT NOT NULL,
