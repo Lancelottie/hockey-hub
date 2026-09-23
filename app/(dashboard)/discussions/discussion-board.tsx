@@ -138,25 +138,23 @@ export default function DiscussionBoard({
       <div className="panel-heading">
         <h2>Discussion board</h2>
       </div>
-      {canManage && (
-        <form onSubmit={postDiscussion} className="mt-4 space-y-2">
-          <label className="sr-only" htmlFor="discussion-draft">
-            Start a discussion
-          </label>
-          <textarea
-            id="discussion-draft"
-            className="w-full rounded-lg border border-[var(--border-primary)] p-3 text-sm"
-            rows={3}
-            maxLength={2000}
-            placeholder="Raise a discussion point for the team…"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-          <button className="primary-button" disabled={posting || !draft.trim()}>
-            {posting ? "Posting…" : "Post"}
-          </button>
-        </form>
-      )}
+      <form onSubmit={postDiscussion} className="mt-4 space-y-2">
+        <label className="sr-only" htmlFor="discussion-draft">
+          Start a discussion
+        </label>
+        <textarea
+          id="discussion-draft"
+          className="w-full rounded-lg border border-[var(--border-primary)] p-3 text-sm"
+          rows={3}
+          maxLength={2000}
+          placeholder="Raise a discussion point for the team…"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        <button className="primary-button" disabled={posting || !draft.trim()}>
+          {posting ? "Posting…" : "Post"}
+        </button>
+      </form>
       {error && (
         <p role="alert" className="mt-3 text-sm text-[var(--status-critical)]">
           {error}
@@ -166,7 +164,7 @@ export default function DiscussionBoard({
         <p className="mt-4 text-sm text-[var(--text-secondary)]">Loading…</p>
       ) : discussions.length === 0 ? (
         <p className="mt-4 text-sm text-[var(--text-secondary)]">
-          {canManage ? "Nothing posted yet." : "No discussions yet."}
+          Nothing posted yet — be the first to raise a discussion point.
         </p>
       ) : (
         <ul className="mt-4 space-y-4">

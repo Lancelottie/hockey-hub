@@ -26,7 +26,7 @@ after(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("team discussions: manage-only to start, anyone with team access to reply, author or manager to delete", async (t) => {
+test("team discussions: anyone with team access to start or reply, author or manager to delete", async (t) => {
   const auth = createAuth(true);
   await (await getMigrations(auth.options)).runMigrations();
   migrateApp();
@@ -44,19 +44,23 @@ test("team discussions: manage-only to start, anyone with team access to reply, 
   snapshot.teams = [{ id: "team", name: "Ladies 1s" }];
   await writeClub(users.club_admin, "club", 0, snapshot);
 
-  await t.test("a read-only member can't start a discussion, but can see the board", async () => {
-    await assert.rejects(postTeamDiscussion(users.read_only, "club", "team", "Read Only", "Hello"), AccessError);
+  await t.test("a read-only member can see the empty board and start a discussion", async () => {
     assert.deepEqual(await listTeamDiscussions(users.read_only, "club", "team"), []);
+    await postTeamDiscussion(users.read_only, "club", "team", "Read Only", "Training moved to Tuesday?");
+    const [discussion] = await listTeamDiscussions(users.read_only, "club", "team");
+    assert.equal(discussion.body, "Training moved to Tuesday?");
+    assert.equal(discussion.authorName, "Read Only");
   });
 
-  await t.test("a manager starts a discussion; a read-only member can reply to it", async () => {
-    await postTeamDiscussion(users.club_admin, "club", "team", "Admin", "Training moved to Tuesday?");
+  await t.test("both a manager and the read-only author can reply to the discussion", async () => {
     const [discussion] = await listTeamDiscussions(users.club_admin, "club", "team");
-    assert.equal(discussion.body, "Training moved to Tuesday?");
-    await postTeamDiscussionReply(users.read_only, "club", "team", discussion.id, "Read Only", "Works for me!");
-    const withReply = await listTeamDiscussions(users.read_only, "club", "team");
-    assert.equal(withReply[0].replies.length, 1);
-    assert.equal(withReply[0].replies[0].authorName, "Read Only");
+    await postTeamDiscussionReply(users.club_admin, "club", "team", discussion.id, "Admin", "Works for me!");
+    await postTeamDiscussionReply(users.read_only, "club", "team", discussion.id, "Read Only", "Great, see you there.");
+    const withReplies = await listTeamDiscussions(users.read_only, "club", "team");
+    assert.deepEqual(
+      withReplies[0].replies.map((r) => r.authorName),
+      ["Admin", "Read Only"],
+    );
   });
 
   await t.test("rejects a reply to a discussion from another team/club", async () => {
@@ -67,18 +71,19 @@ test("team discussions: manage-only to start, anyone with team access to reply, 
     );
   });
 
-  await t.test("the reply's own author can delete it; another non-manager cannot", async () => {
+  await t.test("the reply's own author can delete it; another non-author non-manager cannot", async () => {
     const [discussion] = await listTeamDiscussions(users.club_admin, "club", "team");
-    const [reply] = discussion.replies;
-    // A second read-only user (not the author) may not delete someone else's reply.
+    const [adminReply, readOnlyReply] = discussion.replies;
+    // A third read-only user — neither the author nor a manager — may not delete either reply.
     const auth2 = createAuth(true);
     const otherPassword = randomBytes(24).toString("base64url");
     const other = (await auth2.api.signUpEmail({ body: { email: "other@example.test", name: "Other", password: otherPassword } })).user;
     db.prepare("INSERT INTO app_accounts(user_id) VALUES(?)").run(other.id);
     db.prepare("INSERT INTO club_memberships VALUES(?,?,?)").run(other.id, "club", "read_only");
-    await assert.rejects(deleteTeamDiscussionReply(other.id, "club", "team", discussion.id, reply.id), AccessError);
-    await deleteTeamDiscussionReply(users.read_only, "club", "team", discussion.id, reply.id);
-    assert.deepEqual((await listTeamDiscussions(users.club_admin, "club", "team"))[0].replies, []);
+    await assert.rejects(deleteTeamDiscussionReply(other.id, "club", "team", discussion.id, readOnlyReply.id), AccessError);
+    // The read-only author can delete their own reply, even though they aren't a manager.
+    await deleteTeamDiscussionReply(users.read_only, "club", "team", discussion.id, readOnlyReply.id);
+    assert.deepEqual((await listTeamDiscussions(users.club_admin, "club", "team"))[0].replies, [adminReply]);
   });
 
   await t.test("a manager can delete the whole discussion, cascading its replies", async () => {

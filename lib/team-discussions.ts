@@ -39,9 +39,9 @@ export function migrateTeamDiscussions(db: Database.Database) {
   `);
 }
 
-/** Everyone with team access (any role) may read and reply; starting a new discussion, like
- * editing fixtures/squads, needs manage access. Anyone may delete their own reply; only a
- * manager may delete someone else's reply or a whole discussion. */
+/** Everyone with team access (any role) may read, start a discussion, and reply — unlike
+ * editing fixtures/squads, this doesn't need manage access. Anyone may delete their own reply;
+ * only a manager may delete someone else's reply or a whole discussion. */
 export async function listTeamDiscussions(userId: string, clubId: string, teamId: string): Promise<TeamDiscussion[]> {
   await requireTeamAccess(userId, clubId, teamId);
   const db = getStore();
@@ -74,7 +74,7 @@ export async function postTeamDiscussion(
   authorName: string,
   body: string,
 ): Promise<void> {
-  await requireTeamManageAccess(userId, clubId, teamId);
+  await requireTeamAccess(userId, clubId, teamId);
   if (!body.trim()) throw new AccessError(400, "Write something before posting.");
   await getStore()
     .prepare("INSERT INTO team_discussions(id,club_id,team_id,author_id,author_name,body) VALUES(?,?,?,?,?,?)")
