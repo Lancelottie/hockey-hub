@@ -51,6 +51,8 @@ export type Formation = FormationPreset & {
   status: "draft" | "published";
   assignments: Record<string, string>;
   noKeeper?: boolean;
+  /** Overrides the default home-blue/away-red shirt colour on the pitch diagram. */
+  kitColor?: "blue" | "red";
 };
 
 export type Lineup = {

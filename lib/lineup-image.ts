@@ -1,4 +1,4 @@
-import { GOALKEEPER_COLORS, HOME_COLOR, AWAY_COLOR } from "./kit-colors";
+import { GOALKEEPER_COLORS, resolveKitColor } from "./kit-colors";
 import { formatFixtureLabel, formatMatchDateLong } from "./match-format";
 import { generateSlots, playerShirtLabel } from "./formation";
 import type { Formation, Lineup, Match, Player } from "./types";
@@ -39,11 +39,11 @@ function drawShirt(
   radius: number,
   player: Player | undefined,
   isGoalkeeper: boolean,
-  isHome: boolean,
+  outfieldColor: string,
   ownTeamId: string,
 ) {
   const kit = player?.goalkeeperKit ?? "yellow";
-  const color = isGoalkeeper ? GOALKEEPER_COLORS[kit] : isHome ? HOME_COLOR : AWAY_COLOR;
+  const color = isGoalkeeper ? GOALKEEPER_COLORS[kit] : outfieldColor;
   const bottom = cy + radius * 0.92; // ~ the icon's bottom hem, for anchoring the name below it
 
   ctx.save();
@@ -92,6 +92,7 @@ export async function renderLineupImage(params: {
   players: Player[];
 }): Promise<string> {
   const { teamName, match, formation, lineup, players } = params;
+  const outfieldColor = resolveKitColor(match.isHome, formation.kitColor);
   const slots = generateSlots(formation.lines, formation.name);
   const subs = lineup.subs
     .filter((id): id is string => Boolean(id))
@@ -140,7 +141,7 @@ export async function renderLineupImage(params: {
   for (const slot of slots) {
     if (slot.id === "gk" && formation.noKeeper) continue;
     const player = players.find((p) => p.id === formation.assignments[slot.id]);
-    drawShirt(ctx, (slot.x / 100) * CANVAS_W, (slot.y / 100) * PITCH_H, STARTER_RADIUS, player, slot.id === "gk", match.isHome, match.teamId);
+    drawShirt(ctx, (slot.x / 100) * CANVAS_W, (slot.y / 100) * PITCH_H, STARTER_RADIUS, player, slot.id === "gk", outfieldColor, match.teamId);
   }
   ctx.restore();
 
@@ -161,7 +162,7 @@ export async function renderLineupImage(params: {
       const row = Math.floor(i / 4);
       const cx = 130 + col * SUB_COL_W;
       const cy = footerTop + 140 + row * SUB_ROW_H;
-      drawShirt(ctx, cx, cy, SUB_RADIUS, player, false, match.isHome, match.teamId);
+      drawShirt(ctx, cx, cy, SUB_RADIUS, player, false, outfieldColor, match.teamId);
     });
   }
 

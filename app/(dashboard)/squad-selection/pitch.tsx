@@ -7,14 +7,14 @@ import PlayerShirt from "./player-shirt";
 export default function Pitch({
   players,
   placements,
-  isHome,
+  outfieldColor,
   onDrop,
   onDragStart,
   onRemove,
 }: {
   players: Player[];
   placements: PitchPlacement[];
-  isHome: boolean;
+  outfieldColor: string;
   onDrop: (playerId: string, x: number, y: number) => void;
   onDragStart: (event: DragEvent, playerId: string) => void;
   onRemove: (playerId: string) => void;
@@ -69,7 +69,7 @@ export default function Pitch({
             <PlayerShirt
               key={placement.playerId}
               player={player}
-              isHome={isHome}
+              outfieldColor={outfieldColor}
               onDragStart={(event) => onDragStart(event, placement.playerId)}
               onRemove={() => onRemove(placement.playerId)}
               style={{

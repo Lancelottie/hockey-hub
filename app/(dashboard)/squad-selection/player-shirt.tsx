@@ -2,17 +2,17 @@
 
 import { Shirt, X } from "lucide-react";
 import type { Player } from "@/lib/types";
-import { AWAY_COLOR, GOALKEEPER_COLORS, HOME_COLOR } from "@/lib/kit-colors";
+import { GOALKEEPER_COLORS } from "@/lib/kit-colors";
 
 export default function PlayerShirt({
   player,
-  isHome,
+  outfieldColor,
   onDragStart,
   onRemove,
   style,
 }: {
   player: Player;
-  isHome: boolean;
+  outfieldColor: string;
   onDragStart: (event: React.DragEvent) => void;
   onRemove: () => void;
   style?: React.CSSProperties;
@@ -20,9 +20,7 @@ export default function PlayerShirt({
   const shirtColor =
     player.position === "Goalkeeper" && player.goalkeeperKit
       ? GOALKEEPER_COLORS[player.goalkeeperKit]
-      : isHome
-        ? HOME_COLOR
-        : AWAY_COLOR;
+      : outfieldColor;
 
   const numberColor = shirtColor === GOALKEEPER_COLORS.yellow ? "#111827" : "#ffffff";
 

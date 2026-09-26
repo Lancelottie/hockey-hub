@@ -61,6 +61,7 @@ const formation = z.object({
   status: z.enum(["draft", "published"]),
   assignments: record(id),
   noKeeper: z.boolean().optional(),
+  kitColor: z.enum(["blue", "red"]).optional(),
 }).strict();
 const lineup = z
   .object({

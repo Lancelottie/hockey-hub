@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Shirt } from "lucide-react";
-import { AWAY_COLOR, GOALKEEPER_COLORS, HOME_COLOR } from "@/lib/kit-colors";
+import { GOALKEEPER_COLORS, KIT_COLORS, type KitColor } from "@/lib/kit-colors";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTeam } from "@/lib/team-context";
 import { loadLineup, loadPlayers, loadTeams, saveLineup, saveTeams, subscribeStorage, fixtureSyncInProgress } from "@/lib/storage";
@@ -86,6 +86,7 @@ export default function FormationEditor({ match }: { match: Match }) {
   const playerLabel = (p: { id: string; name: string; number: number | null; teamId: string }) =>
     `${p.name} · #${p.number ?? "—"}${p.teamId !== match.teamId ? ` (${teamNameById[p.teamId] ?? "other team"})` : ""}`;
   const formation = lineup.formation;
+  const effectiveKit = formation?.kitColor ?? (match.isHome ? "blue" : "red");
   const slots = formation ? generateSlots(formation.lines, formation.name) : [];
   const required = requiredSlots(slots, formation?.noKeeper);
   const allSlots = [...slots, ...Array.from({ length: MAX_SUBS }, (_, i) => ({ id: `sub-${i}`, label: `Substitute ${i + 1}`, x: 0, y: 0 }))];
@@ -167,6 +168,10 @@ export default function FormationEditor({ match }: { match: Match }) {
       }
     } catch (error) { setMessage((error as Error).message); }
   }
+  function setKitColor(value: KitColor) {
+    if (!editable || !formation) return;
+    persist(withFormation(lineup, { ...formation, kitColor: value }));
+  }
   function setNoKeeper(value: boolean) {
     if (!editable || !formation) return;
     const nextAssignments = { ...formation.assignments };
@@ -185,7 +190,7 @@ export default function FormationEditor({ match }: { match: Match }) {
   function slotButton(slot: { id: string; label: string }, onPitch: boolean) {
     const player = players.find(p => p.id === playerAt(lineup, slot.id));
     const isEmptyGk = slot.id === "gk" && !player && !!formation?.noKeeper;
-    const shirtColor = isEmptyGk ? "#94a3b8" : slot.id === "gk" ? GOALKEEPER_COLORS[player?.goalkeeperKit ?? "yellow"] : match.isHome ? HOME_COLOR : AWAY_COLOR;
+    const shirtColor = isEmptyGk ? "#94a3b8" : slot.id === "gk" ? GOALKEEPER_COLORS[player?.goalkeeperKit ?? "yellow"] : KIT_COLORS[effectiveKit];
     const borrowed = player && player.teamId !== match.teamId;
     return <button type="button" data-slot={slot.id} disabled={!editable}
       title={borrowed ? `Borrowed from ${teamNameById[player.teamId] ?? "another team"}` : undefined}
@@ -202,6 +207,18 @@ export default function FormationEditor({ match }: { match: Match }) {
         <p className="text-sm">{formation ? `${formation.name || formation.lines.join("-")} · ${formation.status === "draft" ? "Draft — visible to managers only" : "Published"}` : canWrite ? "Choose your formation" : "No published formation yet."}</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
+        {editable && formation && (
+          <div className="flex items-center gap-1 rounded-full border border-[var(--border-primary)] p-1" role="group" aria-label="Kit colour">
+            {(Object.keys(KIT_COLORS) as KitColor[]).map(color => (
+              <button key={color} type="button" aria-pressed={effectiveKit === color} onClick={() => setKitColor(color)}
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium capitalize transition-colors"
+                style={effectiveKit === color ? { background: KIT_COLORS[color], color: "#fff" } : { color: "var(--text-secondary)" }}>
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: KIT_COLORS[color] }} />
+                {color}
+              </button>
+            ))}
+          </div>
+        )}
         {formation?.status === "published" && (
           <SaveLineupImage teamName={teamNameById[match.teamId] ?? "Team"} match={match} formation={formation} lineup={lineup} players={players} />
         )}
@@ -234,7 +251,7 @@ export default function FormationEditor({ match }: { match: Match }) {
       {custom && <div className="flex flex-wrap gap-3"><button className="primary-button" onClick={() => build()}>Build formation</button><button className="rounded border px-3 py-2" onClick={savePreset}>Save team preset</button></div>}
       {configChanged && <p className="mt-2 text-sm">Configuration not applied. Build formation to save these changes to the fixture.</p>}
     </details>}
-    {!formation && lineup.placements.length > 0 && <><p>Existing free-position lineup. Build a formation to convert it, keeping selected players.</p><p>Substitutes: {lineup.subs.filter(Boolean).map(id => players.find(p => p.id === id)?.name).join(", ") || "None"}</p><Pitch players={players} placements={lineup.placements} isHome={match.isHome} onDrop={() => {}} onDragStart={e => e.preventDefault()} onRemove={() => {}} /></>}
+    {!formation && lineup.placements.length > 0 && <><p>Existing free-position lineup. Build a formation to convert it, keeping selected players.</p><p>Substitutes: {lineup.subs.filter(Boolean).map(id => players.find(p => p.id === id)?.name).join(", ") || "None"}</p><Pitch players={players} placements={lineup.placements} outfieldColor={KIT_COLORS[effectiveKit]} onDrop={() => {}} onDragStart={e => e.preventDefault()} onRemove={() => {}} /></>}
     {formation && <div className="formation-workspace">
       <div className="min-w-0">
         <div className="formation-direction">Opposition goal ↑</div>

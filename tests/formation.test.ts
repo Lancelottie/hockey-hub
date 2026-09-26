@@ -143,6 +143,36 @@ test("requiredSlots drops only the goalkeeper when noKeeper is set; publish acce
   withoutFlag.lineups.fixture.formation!.noKeeper = false;
   assert.equal(snapshotSchema.safeParse(withoutFlag).success, false);
 });
+test("kitColor lives on the formation, so it can change even on an England-Hockey-imported fixture", async () => {
+  // Imported match records may only be changed by the sync service (writeClub rejects any other
+  // edit to them, and even creating one this way is refused) — kitColor must live on the
+  // formation/lineup document instead, or this feature would be unusable for every synced fixture.
+  const db = getDb();
+  db.exec("INSERT INTO clubs(id,name) VALUES ('kit-club','Kit Club'); INSERT INTO club_memberships VALUES ('captain','kit-club','club_admin')");
+  const data = emptySnapshot();
+  data.teams = [{ id: "team", name: "Team" }];
+  data.players = players;
+  await writeClub("captain", "kit-club", 0, data);
+  // Simulate the England Hockey sync service writing the imported fixture directly.
+  const importedMatch = {
+    id: "imported-fixture", teamId: "team", opponent: "Opposition", date: "",
+    isHome: true, externalSource: "england-hockey" as const, externalKey: "ext-1",
+  };
+  db.prepare("INSERT INTO fixtures(club_id,id,team_id,data) VALUES(?,?,?,?)")
+    .run("kit-club", importedMatch.id, importedMatch.teamId, JSON.stringify(importedMatch));
+
+  const withLineup = structuredClone(data);
+  withLineup.matches = [importedMatch];
+  withLineup.lineups["imported-fixture"] = assignPlayer(empty(), "gk", "p10");
+  await writeClub("captain", "kit-club", 1, withLineup);
+
+  const withKit = structuredClone(withLineup);
+  withKit.lineups["imported-fixture"].formation!.kitColor = "red";
+  const revision = await writeClub("captain", "kit-club", 2, withKit);
+  assert.equal(revision, 3);
+  const reloaded = await readClub("captain", "kit-club");
+  assert.equal(reloaded.data.lineups["imported-fixture"].formation!.kitColor, "red");
+});
 test("presets map defence to our goal, forwards to attack, and extra lines to midfield", () => {
   const slots = generateSlots([4, 3, 3]);
   assert.equal(slots.filter(s => s.role === "Defender").length, 4);
