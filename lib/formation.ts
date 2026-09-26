@@ -39,6 +39,13 @@ export function playersForSlot(players: Player[], slots: FormationSlot[], slotId
 export function requiredSlots(slots: FormationSlot[], noKeeper?: boolean): FormationSlot[] {
   return noKeeper ? slots.filter(slot => slot.id !== "gk") : slots;
 }
+/** First name plus the initial of the (last word of the) surname, for shirt labels — tells
+ * apart teammates who share a first name without needing the full name on a small shirt. */
+export function playerShirtLabel(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return parts[0] ?? "";
+  return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}`;
+}
 
 export function generateSlots(lines: number[], presetName?: string): FormationSlot[] {
   if (!validLines(lines)) throw new Error("Use 1–10 lines with 1–10 outfield players in total.");

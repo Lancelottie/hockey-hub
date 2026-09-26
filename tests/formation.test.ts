@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateSlots, assignPlayer, swapPlayers, withFormation, shirtMatches, eligiblePlayers, lineRole, playersForSlot, requiredSlots } from "../lib/formation";
+import { generateSlots, assignPlayer, swapPlayers, withFormation, shirtMatches, eligiblePlayers, lineRole, playersForSlot, playerShirtLabel, requiredSlots } from "../lib/formation";
 import { emptySnapshot, snapshotSchema } from "../lib/validation";
 import { getDb, migrateApp } from "../lib/db";
 import { readClub, writeClub, AccessError } from "../lib/repository";
@@ -38,6 +38,13 @@ test("assignment, duplicate prevention, removal, swapping and substitutes", () =
   value = assignPlayer(value, "sub-0");
   assert.equal(value.subs[0], null);
   assert.throws(() => assignPlayer(value, "unknown", "p1"), /Unknown position/);
+});
+test("shirt labels show a first name plus the surname's initial, falling back for a single name", () => {
+  assert.equal(playerShirtLabel("Jaimie Becks"), "Jaimie B");
+  assert.equal(playerShirtLabel("Mary Anne Smith-Jones"), "Mary S");
+  assert.equal(playerShirtLabel("  Laura   Palmer  "), "Laura P");
+  assert.equal(playerShirtLabel("Cher"), "Cher");
+  assert.equal(playerShirtLabel(""), "");
 });
 test("shirt lookup handles zero, invalid, unknown and ambiguous numbers", () => {
   assert.equal(shirtMatches(players, "0")[0].id, "p0");

@@ -1,6 +1,6 @@
 import { GOALKEEPER_COLORS, HOME_COLOR, AWAY_COLOR } from "./kit-colors";
 import { formatFixtureLabel, formatMatchDateLong } from "./match-format";
-import { generateSlots } from "./formation";
+import { generateSlots, playerShirtLabel } from "./formation";
 import type { Formation, Lineup, Match, Player } from "./types";
 
 const CANVAS_W = 1080;
@@ -70,7 +70,7 @@ function drawShirt(
 
   if (player) {
     const borrowed = player.teamId !== ownTeamId;
-    const label = `${player.name.split(" ")[0]}${borrowed ? "*" : ""}`;
+    const label = `${playerShirtLabel(player.name)}${borrowed ? "*" : ""}`;
     ctx.font = `600 ${Math.round(radius * 0.46)}px ${FONT}`;
     ctx.lineJoin = "round";
     ctx.lineWidth = Math.round(radius * 0.18);

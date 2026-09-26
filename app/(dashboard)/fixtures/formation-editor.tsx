@@ -6,7 +6,7 @@ import { AWAY_COLOR, GOALKEEPER_COLORS, HOME_COLOR } from "@/lib/kit-colors";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTeam } from "@/lib/team-context";
 import { loadLineup, loadPlayers, loadTeams, saveLineup, saveTeams, subscribeStorage, fixtureSyncInProgress } from "@/lib/storage";
-import { assignPlayer, BUILTIN_PRESETS, DEFAULT_LINES, generateSlots, lineLabel, playersForSlot, MAX_STARTERS, MAX_SUBS, playerAt, requiredSlots, shirtMatches, swapPlayers, validLines, withFormation } from "@/lib/formation";
+import { assignPlayer, BUILTIN_PRESETS, DEFAULT_LINES, generateSlots, lineLabel, playerShirtLabel, playersForSlot, MAX_STARTERS, MAX_SUBS, playerAt, requiredSlots, shirtMatches, swapPlayers, validLines, withFormation } from "@/lib/formation";
 import { sectionTeamIds } from "@/lib/team-sections";
 import type { Lineup, Match, Player, Team } from "@/lib/types";
 import Pitch from "../squad-selection/pitch";
@@ -193,7 +193,7 @@ export default function FormationEditor({ match }: { match: Match }) {
       aria-pressed={selected === slot.id} aria-expanded={selected === slot.id} aria-controls={selected === slot.id ? "position-player-picker" : undefined} onClick={() => choose(slot.id)}
       className={`formation-slot ${selected === slot.id || swapFrom === slot.id ? "is-selected" : ""} ${onPitch ? "" : "bench-slot"}`}>
       <span className="formation-number" style={{ color: shirtColor }}><Shirt aria-hidden="true" fill="currentColor" strokeWidth={1.2} /><span style={{ color: shirtColor === GOALKEEPER_COLORS.yellow ? "#142b3f" : "white" }}>{player ? player.number ?? "•" : isEmptyGk ? "–" : "+"}</span></span>
-      <span className="formation-player">{player ? `${player.name.split(" ")[0]}${borrowed ? "*" : ""}` : slot.id === "gk" ? (isEmptyGk ? "No GK" : "GK") : slots.find(s => s.id === slot.id)?.role === "Defender" ? "Defence" : slots.find(s => s.id === slot.id)?.role === "Midfielder" ? "Mid" : slots.find(s => s.id === slot.id)?.role === "Forward" ? "Forward" : "Select"}</span>
+      <span className="formation-player">{player ? `${playerShirtLabel(player.name)}${borrowed ? "*" : ""}` : slot.id === "gk" ? (isEmptyGk ? "No GK" : "GK") : slots.find(s => s.id === slot.id)?.role === "Defender" ? "Defence" : slots.find(s => s.id === slot.id)?.role === "Midfielder" ? "Mid" : slots.find(s => s.id === slot.id)?.role === "Forward" ? "Forward" : "Select"}</span>
     </button>;
   }
   return <section aria-label="Team formation" className="panel min-w-0 space-y-4">
