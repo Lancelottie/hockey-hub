@@ -15,7 +15,7 @@ const player = z
     name: z.string().trim().min(1).max(120),
     number: z.number().int().min(0).max(999).nullable(),
     position: z.enum(["Goalkeeper", "Defender", "Midfielder", "Forward"]),
-    goalkeeperKit: z.enum(["yellow", "black", "purple"]).optional(),
+    goalkeeperKit: z.enum(["yellow", "black", "purple", "pink"]).optional(),
   })
   .strict();
 const match = z

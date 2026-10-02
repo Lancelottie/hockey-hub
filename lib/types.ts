@@ -1,7 +1,7 @@
 export type PlayerPosition =
   "Goalkeeper" | "Defender" | "Midfielder" | "Forward";
 
-export type GoalkeeperKit = "yellow" | "black" | "purple";
+export type GoalkeeperKit = "yellow" | "black" | "purple" | "pink";
 
 export type Team = {
   id: string;
