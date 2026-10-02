@@ -80,6 +80,7 @@ export default function FormationEditor({ match }: { match: Match }) {
   // Home team players and players explicitly pooled to this team (Squads > Additional teams) are always
   // available, no extra step. Loaning in (below) is for someone not already pre-arranged that way.
   const loanPool = allPlayers.filter(p => loanTeamIds.includes(p.teamId) && !pooledPlayerIds.has(p.id));
+  // Only the picker is filtered by loan mode; saved assignments use the full roster.
   const players = allPlayers.filter(
     p => p.teamId === match.teamId || pooledPlayerIds.has(p.id) || (loanMode && loanTeamIds.includes(p.teamId)),
   );
@@ -90,7 +91,7 @@ export default function FormationEditor({ match }: { match: Match }) {
   const slots = formation ? generateSlots(formation.lines, formation.name) : [];
   const required = requiredSlots(slots, formation?.noKeeper);
   const allSlots = [...slots, ...Array.from({ length: MAX_SUBS }, (_, i) => ({ id: `sub-${i}`, label: `Substitute ${i + 1}`, x: 0, y: 0 }))];
-  const selectedPlayer = players.find(p => p.id === (selected ? playerAt(lineup, selected) : undefined));
+  const selectedPlayer = allPlayers.find(p => p.id === (selected ? playerAt(lineup, selected) : undefined));
   const positionPlayers = showAllPlayers ? players : playersForSlot(players, slots, selected);
   const matches = number ? shirtMatches(positionPlayers, number) : [];
   const count = lines.reduce((a, b) => a + b, 1);
@@ -119,7 +120,7 @@ export default function FormationEditor({ match }: { match: Match }) {
     const remaining = lineup.placements.map(p => p.playerId);
     // Match existing starters to their recorded roles before retaining any tactical overrides.
     for (const slot of nextSlots) {
-      const index = remaining.findIndex(id => players.find(p => p.id === id)?.position === slot.role);
+      const index = remaining.findIndex(id => allPlayers.find(p => p.id === id)?.position === slot.role);
       if (index >= 0) assignments[slot.id] = remaining.splice(index, 1)[0];
     }
     const emptySlots = nextSlots.filter(slot => !assignments[slot.id]);
@@ -188,7 +189,7 @@ export default function FormationEditor({ match }: { match: Match }) {
     setPresets(next); setMessage(`Preset “${presetName}” saved for this team.`);
   }
   function slotButton(slot: { id: string; label: string }, onPitch: boolean) {
-    const player = players.find(p => p.id === playerAt(lineup, slot.id));
+    const player = allPlayers.find(p => p.id === playerAt(lineup, slot.id));
     const isEmptyGk = slot.id === "gk" && !player && !!formation?.noKeeper;
     const shirtColor = isEmptyGk ? "#94a3b8" : slot.id === "gk" ? GOALKEEPER_COLORS[player?.goalkeeperKit ?? "yellow"] : KIT_COLORS[effectiveKit];
     const borrowed = player && player.teamId !== match.teamId;
@@ -220,7 +221,7 @@ export default function FormationEditor({ match }: { match: Match }) {
           </div>
         )}
         {formation?.status === "published" && (
-          <SaveLineupImage teamName={teamNameById[match.teamId] ?? "Team"} match={match} formation={formation} lineup={lineup} players={players} />
+          <SaveLineupImage teamName={teamNameById[match.teamId] ?? "Team"} match={match} formation={formation} lineup={lineup} players={allPlayers} />
         )}
         {editable && formation && <button className="primary-button" disabled={slots.length !== MAX_STARTERS || required.some(s => !playerAt(lineup, s.id))}
           onClick={() => { persist(withFormation(lineup, { ...formation, status: formation.status === "published" ? "draft" : "published" })); setMessage(""); }}>
@@ -251,7 +252,7 @@ export default function FormationEditor({ match }: { match: Match }) {
       {custom && <div className="flex flex-wrap gap-3"><button className="primary-button" onClick={() => build()}>Build formation</button><button className="rounded border px-3 py-2" onClick={savePreset}>Save team preset</button></div>}
       {configChanged && <p className="mt-2 text-sm">Configuration not applied. Build formation to save these changes to the fixture.</p>}
     </details>}
-    {!formation && lineup.placements.length > 0 && <><p>Existing free-position lineup. Build a formation to convert it, keeping selected players.</p><p>Substitutes: {lineup.subs.filter(Boolean).map(id => players.find(p => p.id === id)?.name).join(", ") || "None"}</p><Pitch players={players} placements={lineup.placements} outfieldColor={KIT_COLORS[effectiveKit]} onDrop={() => {}} onDragStart={e => e.preventDefault()} onRemove={() => {}} /></>}
+    {!formation && lineup.placements.length > 0 && <><p>Existing free-position lineup. Build a formation to convert it, keeping selected players.</p><p>Substitutes: {lineup.subs.filter(Boolean).map(id => allPlayers.find(p => p.id === id)?.name).join(", ") || "None"}</p><Pitch players={allPlayers} placements={lineup.placements} outfieldColor={KIT_COLORS[effectiveKit]} onDrop={() => {}} onDragStart={e => e.preventDefault()} onRemove={() => {}} /></>}
     {formation && <div className="formation-workspace">
       <div className="min-w-0">
         <div className="formation-direction">Opposition goal ↑</div>

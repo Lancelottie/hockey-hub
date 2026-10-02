@@ -35,6 +35,13 @@ data.teams = [
 ];
 data.players = [
   {
+    id: "casey",
+    teamId: "seconds",
+    name: "Casey Green",
+    number: 12,
+    position: "Defender",
+  },
+  {
     id: "alex",
     teamId: "firsts",
     name: "Alex Morgan",
