@@ -5,7 +5,7 @@ Implemented and investigated on 6 September 2026.
 ## Existing architecture audited before implementation
 
 - Next.js App Router, React/TypeScript, Node route handlers, Tailwind and shared navy/teal/white styling. The installed Next.js route-handler guide was consulted.
-- Better Auth provides database sessions. Active account status and live club membership are checked server-side. Existing management roles are `administrator`, `club_admin`, `manager`, and `coach`; `player` and `read_only` can view fixtures but cannot configure or sync them. There is no separate captain role: captains should use an existing management role. Membership permissions currently apply across a club, not to an individual team.
+- Better Auth provides database sessions. Active account status and live club membership are checked server-side. Fixture configuration and sync are available to `administrator`, `club_admin`, and `northern_hockey_admin`. Other roles can view fixtures but cannot configure or sync them. Active-role permissions and any team scope apply on both the page and API. The dedicated hockey-admin role can sync without general workspace editing permissions.
 - SQLite (`better-sqlite3`) has clubs, club memberships, teams, players, fixtures, fixture documents (lineups, captain tasks and reviews), assessments and audit events. Fixtures already have stable internal IDs and team IDs. They store their `Match` data as JSON, so imported information extends that model without a duplicate fixture table.
 - The frontend has an authenticated in-memory workspace, serialised saves and a club revision to prevent stale writes. Fixture imports participate in that same revision mechanism. There is no existing scheduler or player-availability model.
 - Integration parsing/fetching belongs in a server-side service called by authenticated API routes, independently of the React fixture UI.
@@ -28,7 +28,7 @@ A read-only check through the implemented adapter returned **22 fixtures: 11 hom
 
 ## Configuration and use
 
-1. Sign in with an existing management role and select the intended club/team.
+1. Sign in as a club administrator or Northern Hockey Admin and select the intended club/team.
 2. Open **Fixtures**.
 3. Paste that team's HTTPS England Hockey `/teams/…` URL into **England Hockey fixtures URL**.
 4. Select **Save & Import Fixtures**. The detected England Hockey team name and last successful sync time appear below the form.

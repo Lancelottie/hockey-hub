@@ -60,3 +60,8 @@ export const ROLE_PRIORITY: readonly Role[] = [
 export function defaultActiveRole(roles: Role[]): Role {
   return ROLE_PRIORITY.find(role => roles.includes(role)) ?? roles[0];
 }
+
+/** Fixture imports are available to club administrators and the dedicated hockey admin. */
+export function canSyncFixtures(role: Role) {
+  return canAdmin(role) || isNorthernHockeyAdmin(role);
+}

@@ -1,3 +1,4 @@
+import { canAccessFacilities } from "@/lib/facilities-access";
 import { getActiveSession } from "@/lib/session";
 import { AccessError, listClubs, readClub, writeClub } from "@/lib/repository";
 import { saveSchema } from "@/lib/validation";
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
       {
         ...(await readClub(session.user.id, id)),
         clubs,
-        user: { id: session.user.id, name: session.user.name },
+        user: { id: session.user.id, name: session.user.name, canAccessFacilities: canAccessFacilities(session.user.email) },
       },
       { headers: { "Cache-Control": "private, no-store" } },
     );

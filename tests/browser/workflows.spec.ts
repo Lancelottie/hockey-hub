@@ -46,7 +46,7 @@ test("protected routes, sign-in and player filtering", async ({
     path: "test-results/home-desktop.png",
     fullPage: true,
   });
-  await page.getByRole("link", { name: "My Team", exact: true }).click();
+  await page.getByRole("link", { name: "Team Management", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Alex Morgan" }),
   ).toBeVisible();
@@ -96,7 +96,7 @@ test("lineup and checklist persistence, with mobile navigation", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/home");
   await page.getByRole("button", { name: "Open navigation" }).click();
-  await page.getByRole("link", { name: "My Team", exact: true }).click();
+  await page.getByRole("link", { name: "Team Management", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Alex Morgan" }),
   ).toBeVisible();

@@ -17,6 +17,7 @@ let clubId = "";
 let revision = 0;
 let activeTeamId: string | null = null;
 let writable = false;
+let fixtureSyncAllowed = false;
 let saving = false;
 let syncing = false;
 let dirty = false;
@@ -49,11 +50,13 @@ export function initializeStorage(
   id: string,
   version: number,
   canWrite: boolean,
+  canSync = false,
 ) {
   snapshot = structuredClone(data);
   clubId = id;
   revision = version;
   writable = canWrite;
+  fixtureSyncAllowed = canSync;
   dirty = false;
   blocked = false;
   saving = false;
@@ -249,7 +252,7 @@ export function savePlayerAssessments(value: Record<string, PlayerAssessment>) {
 
 /** Keep a remote sync and the in-memory revision together; never overwrite an unsaved draft. */
 export async function syncTeamFixtures(teamId: string, sourceUrl?: string) {
-  if (!writable)
+  if (!fixtureSyncAllowed)
     throw new Error("You do not have permission to sync fixtures.");
   if (hasUnsavedChanges())
     throw new Error(

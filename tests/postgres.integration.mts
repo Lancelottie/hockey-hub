@@ -1,3 +1,4 @@
+import { createFacilityBooking, submitFacilityCheck, getFacilityBooking, facilityEvidence } from "../lib/facility-security";
 import { checkTeamAccess } from "./helpers/team-access.mts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -88,6 +89,19 @@ test("PostgreSQL transfer, imported login, persistence, concurrency, permissions
     assert.equal(result.counts.user, 1);
     assert.equal(result.counts.fixtures, 1);
     assert.equal(result.alreadyImported, false);
+    // Facility audits and evidence use the same SQL adapter in production PostgreSQL.
+    const facility = await createFacilityBooking(user.user.id, "club", {
+      facility: "Integration pitch", session: "Training", teamId: "team", responsibleId: user.user.id,
+      startsAt: new Date(Date.now() - 3600000).toISOString(), endsAt: new Date(Date.now() - 60000).toISOString(),
+    });
+    const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jN1sAAAAASUVORK5CYII=";
+    const closing = await submitFacilityCheck(user.user.id, "club", facility.id, {
+      kind: "post", responses: facility.checklists.post.map(() => "confirmed"), notes: "", issue: null,
+      photos: [{ area: "facility", data: png }, { area: "pitch", data: png }],
+    });
+    assert.equal((await getFacilityBooking(user.user.id, "club", facility.id)).checks.length, 1);
+    assert.equal(await facilityEvidence(user.user.id, "club", facility.id, closing.photos[0].id), png);
+
     assert.equal((await importSqlite(source, getPool())).alreadyImported, true);
     const loaded = await readClub(user.user.id, "club");
     assert.deepEqual(loaded.data, data);

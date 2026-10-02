@@ -5,19 +5,19 @@ import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { useTeam } from "@/lib/team-context";
 import { canAdmin, isNorthernHockeyAdmin } from "@/lib/users";
+import { isTeamManagementPath } from "./team-management-nav";
+import { isClubManagementPath } from "./club-management-nav";
 import LogoutButton from "../logout-button";
 const items = [
   { href: "/sections", label: "Sections" },
   { href: "/home", label: "Home" },
-  { href: "/my-team", label: "My Team" },
-  { href: "/squads", label: "Players" },
-  { href: "/fixtures", label: "Fixtures" },
+  { href: "/my-team", label: "Team Management" },
   { href: "/discussions", label: "Discussions" },
 ];
 export default function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { club, clubs, switchClub, userName } = useTeam();
+  const { club, clubs, switchClub, userName, canAccessFacilities } = useTeam();
   return (
     <header className="club-header">
       <div className="club-header-inner">
@@ -49,11 +49,11 @@ export default function Sidebar() {
         >
           {[
             ...items,
+            ...(canAccessFacilities || canAdmin(club.role)
+              ? [{ href: canAccessFacilities ? "/facilities-management" : "/admin", label: "Club Management" }]
+              : []),
             ...(isNorthernHockeyAdmin(club.role)
               ? [{ href: "/registrations", label: "Registrations" }]
-              : []),
-            ...(canAdmin(club.role)
-              ? [{ href: "/admin", label: "Admin" }]
               : []),
           ].map((item) => (
             <Link
@@ -61,7 +61,7 @@ export default function Sidebar() {
               href={item.href}
               onClick={() => setOpen(false)}
               aria-current={
-                pathname === item.href || pathname.startsWith(item.href + "/")
+                (item.href === "/my-team" ? isTeamManagementPath(pathname) : item.label === "Club Management" ? isClubManagementPath(pathname) : pathname === item.href || pathname.startsWith(item.href + "/"))
                   ? "page"
                   : undefined
               }

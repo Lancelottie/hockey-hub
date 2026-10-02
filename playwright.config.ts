@@ -26,6 +26,7 @@ export default defineConfig({
       DATABASE_PATH: ".test-data/e2e.sqlite",
       NEXT_DIST_DIR: ".next-e2e",
       E2E_PASSWORD: password,
+      FACILITIES_OWNER_EMAIL: "captain@example.test",
     },
   },
 });

@@ -1,3 +1,4 @@
+import { facilitySecuritySchema } from "./facility-security-schema";
 import { roleSqlValues } from "./users";
 export const postgresSchema = `
     CREATE TABLE IF NOT EXISTS app_accounts (
@@ -170,4 +171,5 @@ export const postgresSchema = `
       id TEXT PRIMARY KEY, source_digest TEXT NOT NULL, counts TEXT NOT NULL,
       completed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+${facilitySecuritySchema}
 `;

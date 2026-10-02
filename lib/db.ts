@@ -1,3 +1,4 @@
+import { facilitySecuritySchema } from "./facility-security-schema";
 import { roleSqlValues } from "./users";
 import Database from "better-sqlite3";
 import { migrateEnglandHockey } from "./england-hockey/migration";
@@ -90,6 +91,7 @@ export function migrateApp() {
   migratePlayerLoans(getDb());
   migratePasswordChangeFlag(getDb());
   migrateClubDiscussions(getDb());
+  getDb().exec(facilitySecuritySchema);
   // A member may hold several roles per club (e.g. club_admin and a team captaincy) and
   // switch which is active; requires club_memberships' PK to already include role (above).
   getDb().exec(`

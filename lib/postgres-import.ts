@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { Pool } from "pg";
 
-export const TRANSFER_TABLES = ["user", "account", "app_accounts", "clubs", "club_memberships", "membership_team_access", "active_roles", "teams", "team_formation_presets", "players", "fixtures", "fixture_documents", "assessments", "audit_events", "team_fixture_sources"] as const;
+export const TRANSFER_TABLES = ["user", "account", "app_accounts", "clubs", "club_memberships", "membership_team_access", "active_roles", "teams", "team_formation_presets", "players", "fixtures", "fixture_documents", "assessments", "audit_events", "team_fixture_sources", "facility_security_settings", "facility_bookings", "facility_security_checks", "facility_security_evidence"] as const;
 const orderedTables = new Set<string>(["teams", "players", "fixtures"]);
 // Newer tables absent from an older SQLite backup — import as empty rather than failing.
-const optionalTables = new Set<string>(["membership_team_access", "active_roles"]);
+const optionalTables = new Set<string>(["membership_team_access", "active_roles", "facility_security_settings", "facility_bookings", "facility_security_checks", "facility_security_evidence"]);
 const quote = (name: string) => '"' + name.replaceAll('"', '""') + '"';
 export type TransferResult = { alreadyImported: boolean; counts: Record<string, number>; digest: string };
 

@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { getActiveSession, requiresPasswordChange } from "@/lib/session";
 import { TeamProvider } from "@/lib/team-context";
 import Sidebar from "./sidebar";
+import ClubManagementNav from "./club-management-nav";
+import TeamManagementNav from "./team-management-nav";
 import Topbar from "./topbar";
 export default async function DashboardLayout({
   children,
@@ -24,6 +26,8 @@ export default async function DashboardLayout({
         id="main"
         className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-8 lg:py-8"
       >
+        <TeamManagementNav />
+        <ClubManagementNav />
         {children}
       </main>
     </TeamProvider>

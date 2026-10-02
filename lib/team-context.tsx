@@ -11,7 +11,7 @@ import {
 } from "react";
 import type { Team } from "./types";
 import type { Role } from "./users";
-import { canManage } from "./users";
+import { canManage, canSyncFixtures } from "./users";
 import {
   clearStorage,
   exportDraft,
@@ -26,7 +26,7 @@ type Club = { id: string; name: string; role: Role; availableRoles: Role[] };
 type Workspace = {
   club: Club;
   clubs: Club[];
-  user: { id: string; name: string };
+  user: { id: string; name: string; canAccessFacilities?: boolean };
   data: Snapshot;
   revision: number;
 };
@@ -39,6 +39,7 @@ type TeamContextValue = {
   clubs: Club[];
   userId: string;
   userName: string;
+  canAccessFacilities: boolean;
   canWrite: boolean;
   switchClub: (id: string) => void;
   switchRole: (role: Role) => void;
@@ -72,6 +73,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         result.club.id,
         result.revision,
         canManage(result.club.role),
+        canSyncFixtures(result.club.role),
       );
       setWorkspace(result);
       setActiveTeamId(result.data.teams[0]?.id ?? null);
@@ -156,6 +158,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         clubs: workspace.clubs,
         userId: workspace.user.id,
         userName: workspace.user.name,
+        canAccessFacilities: workspace.user.canAccessFacilities === true,
         canWrite: canManage(workspace.club.role),
         switchClub,
         switchRole: (role) => void switchRole(role),

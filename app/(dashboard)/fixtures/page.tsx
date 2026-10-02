@@ -3,7 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useTeam } from "@/lib/team-context";
-import { isNorthernHockeyAdmin } from "@/lib/users";
+import { canSyncFixtures } from "@/lib/users";
 import {
   formatFixtureLabel,
   formatFixtureMonthLabel,
@@ -100,7 +100,7 @@ export default function FixturesPage() {
         </p>
       </div>
 
-      {isNorthernHockeyAdmin(club.role) && activeTeam && (
+      {canSyncFixtures(club.role) && activeTeam && (
         <EnglandHockeySettings
           key={`${club.id}:${activeTeam.id}`}
           teamId={activeTeam.id}

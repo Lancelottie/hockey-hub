@@ -228,6 +228,7 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
   ).run();
   for (const role of [
     "club_admin",
+    "administrator",
     "manager",
     "coach",
     "player",
@@ -257,7 +258,7 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
   ).run();
   const opts = {
     clubId: "a",
-    // England Hockey sync/read is restricted to the Northern Hockey Admin role.
+    // Exercise the dedicated Northern Hockey Admin role.
     actor: { userId: users.northern_hockey_admin },
     fetcher: remote(),
   };
@@ -420,7 +421,7 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
           actor: { userId: users.northern_hockey_admin },
           fetcher: revoke,
         }),
-        /Northern Hockey Admin/,
+        /permission for this club/,
       );
       db.prepare("UPDATE app_accounts SET status='active' WHERE user_id=?").run(
         users.northern_hockey_admin,
@@ -450,8 +451,8 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
         revision: (await readClub(users.club_admin, "a")).revision,
       };
       assert.equal((await POST(request("none", body))).status, 401);
-      // England Hockey access is restricted to the Northern Hockey Admin role; every other role is rejected regardless of canManage/canAdmin.
-      for (const role of ["player", "read_only", "club_admin", "manager", "coach"]) {
+      // Ordinary team management does not grant fixture-import access.
+      for (const role of ["player", "read_only", "manager", "coach"]) {
         assert.equal((await POST(request(role, body))).status, 403);
         assert.equal(
           (
@@ -522,6 +523,23 @@ test("transactional sync, workspace coexistence and authorization", async (t) =>
       }
     },
   );
+  await t.test("both administrator roles can read sources and refresh while respecting team and club scope", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = remote();
+    try {
+      for (const role of ["club_admin", "administrator"]) {
+        const sourceRequest = (teamId: string, clubId = "a") => new Request(`http://localhost:3000/api/england-hockey?clubId=${clubId}&teamId=${teamId}`, { headers: { cookie: cookies[role] } });
+        assert.equal((await GET(sourceRequest("one"))).status, 200);
+        assert.equal((await GET(sourceRequest("one", "b"))).status, 403);
+        const response = await POST(request(role, { clubId: "a", teamId: "one", revision: (await readClub(users[role], "a")).revision }));
+        assert.equal(response.status, 200);
+        db.prepare("INSERT INTO membership_team_access(user_id,club_id,role,team_ids) VALUES(?,?,?,?)").run(users[role], "a", role, '["one"]');
+        assert.equal((await GET(sourceRequest("two"))).status, 403);
+        assert.equal((await GET(sourceRequest("one"))).status, 200);
+        db.prepare("DELETE FROM membership_team_access WHERE user_id=?").run(users[role]);
+      }
+    } finally { globalThis.fetch = originalFetch; }
+  });
   await t.test(
     "team deletion cleans its source while other teams remain configured",
     async () => {

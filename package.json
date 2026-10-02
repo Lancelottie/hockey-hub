@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
     "fixtures:sync": "node --import tsx scripts/sync-england-hockey.mts",
+    "db:migrate:facilities": "node --import tsx scripts/migrate-facilities.mts",
     "db:migrate": "node --import tsx scripts/migrate-postgres.mts",
     "db:transfer": "node --import tsx scripts/transfer-postgres.mts",
     "test:postgres": "node --import tsx --test tests/postgres.integration.mts"

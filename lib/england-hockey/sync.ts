@@ -1,7 +1,8 @@
+import { canSyncFixtures } from "../users";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { getStore, lockClub } from "../database";
-import { AccessError, requireNorthernAdmin } from "../repository";
+import { AccessError, requireClub } from "../repository";
 import type { Match } from "../types";
 import {
   EnglandHockeyError,
@@ -39,12 +40,17 @@ async function requireTeam(clubId: string, teamId: string) {
       "Choose an existing team before importing fixtures.",
     );
 }
+async function requireFixtureSyncAccess(userId: string, clubId: string, teamId: string) {
+  const club = await requireClub(userId, clubId);
+  if (!canSyncFixtures(club.role) || (club.teamIds !== null && !club.teamIds.includes(teamId)))
+    throw new AccessError(403, "Fixture sync requires club administrator or Northern Hockey Admin access to this team.");
+}
 export async function readFixtureSource(
   userId: string,
   clubId: string,
   teamId: string,
 ) {
-  (await requireNorthernAdmin(userId, clubId));
+  (await requireFixtureSyncAccess(userId, clubId, teamId));
   (await requireTeam(clubId, teamId));
   return (await getFixtureSource(clubId, teamId));
 }
@@ -63,7 +69,7 @@ export async function syncEnglandHockeyFixtures(
 ) {
   const { clubId, actor } = options;
   const authorize = async () => {
-    if ("userId" in actor) (await requireNorthernAdmin(actor.userId, clubId));
+    if ("userId" in actor) (await requireFixtureSyncAccess(actor.userId, clubId, teamId));
     (await requireTeam(clubId, teamId));
   };
   (await authorize());
