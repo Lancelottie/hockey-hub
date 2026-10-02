@@ -49,9 +49,7 @@ export default function Sidebar() {
         >
           {[
             ...items,
-            ...(canAccessFacilities || canAdmin(club.role)
-              ? [{ href: canAccessFacilities ? "/facilities-management" : "/admin", label: "Club Management" }]
-              : []),
+            { href: canAccessFacilities ? "/facilities-management" : canAdmin(club.role) ? "/admin" : "/squads", label: "Club Management" },
             ...(isNorthernHockeyAdmin(club.role)
               ? [{ href: "/registrations", label: "Registrations" }]
               : []),

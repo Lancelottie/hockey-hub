@@ -6,7 +6,7 @@ import { useTeam } from "@/lib/team-context";
 import { canAdmin } from "@/lib/users";
 
 export function isClubManagementPath(pathname: string) {
-  return ["/facilities-management", "/admin"].some(path => pathname === path || pathname.startsWith(`${path}/`));
+  return ["/squads", "/facilities-management", "/admin"].some(path => pathname === path || pathname.startsWith(`${path}/`));
 }
 
 export default function ClubManagementNav() {
@@ -14,6 +14,7 @@ export default function ClubManagementNav() {
   const { club, canAccessFacilities } = useTeam();
   if (!isClubManagementPath(pathname)) return null;
   const tabs = [
+    { href: "/squads", label: "Players" },
     ...(canAccessFacilities ? [{ href: "/facilities-management", label: "Facilities Management" }] : []),
     ...(canAdmin(club.role) ? [{ href: "/admin", label: "Admin" }] : []),
   ];
